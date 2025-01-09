@@ -2,7 +2,6 @@
 import React from "react";
 import Image from "next/image";
 import Swagat from "@/assets/swagat.jpg";
-import Basir from "@/assets/basir.jpg";
 import Bhawani from "@/assets/bhawani.jpg";
 import Aniket from "@/assets/aniket.jpg";
 import Disha from "@/assets/disha.jpg";
@@ -137,13 +136,6 @@ export default function TeamPage() {
           Core Community Members
         </h2>
         <div className="flex flex-wrap justify-center gap-8">
-          <MemberCard
-            name="Basir Khan"
-            role="Core Community Lead"
-            image={Basir}
-            github="https://github.com/BasirKhan418"
-            linkedin="https://www.linkedin.com/in/basir-khan-5aa62b258/"
-          />
           <MemberCard
             name="Aniket Subudhi"
             role="Core Community Lead"
