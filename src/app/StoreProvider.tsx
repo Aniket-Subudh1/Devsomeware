@@ -22,7 +22,7 @@ export default function StoreProvider({
     bio: string;
   } | null;
 }) {
-  const storeRef = useRef<AppStore>();
+  const storeRef = useRef<AppStore | null>(null);
   if (!storeRef.current) {
     storeRef.current = makeStore();
     if (initialUserData?.isauth) {
