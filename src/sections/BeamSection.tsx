@@ -1,11 +1,12 @@
 "use client";
-
-import React, { forwardRef, useRef } from "react";
+import React from "react";
 import { motion, useInView } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AnimatedBeam } from "@/components/ui/animated-beam";
 import { TextGenerateEffect } from "@/components/ui/text-generate-effect";
-const Circle = forwardRef<
+
+// Updated Circle component using new React.forwardRef pattern
+const Circle = React.forwardRef<
   HTMLDivElement,
   { className?: string; children?: React.ReactNode }
 >(({ className, children }, ref) => {
@@ -29,21 +30,26 @@ export function AnimatedBeamMultipleOutputDemo({
 }: {
   className?: string;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const div1Ref = useRef<HTMLDivElement>(null);
-  const div2Ref = useRef<HTMLDivElement>(null);
-  const div3Ref = useRef<HTMLDivElement>(null);
-  const div4Ref = useRef<HTMLDivElement>(null);
-  const div5Ref = useRef<HTMLDivElement>(null);
-  const div6Ref = useRef<HTMLDivElement>(null);
-  const div7Ref = useRef<HTMLDivElement>(null);
+  // Using the new createRef pattern for React 19
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const div1Ref = React.useRef<HTMLDivElement>(null);
+  const div2Ref = React.useRef<HTMLDivElement>(null);
+  const div3Ref = React.useRef<HTMLDivElement>(null);
+  const div4Ref = React.useRef<HTMLDivElement>(null);
+  const div5Ref = React.useRef<HTMLDivElement>(null);
+  const div6Ref = React.useRef<HTMLDivElement>(null);
+  const div7Ref = React.useRef<HTMLDivElement>(null);
+  const headerRef = React.useRef<HTMLHeadingElement>(null);
+  const textRef = React.useRef<HTMLDivElement>(null);
+
+  // Updated useInView hooks with proper typing
+  const textInView = useInView(textRef, { once: false });
+  const headerInView = useInView(headerRef, { once: false });
+
   const words = `Open source contribution is at the core of innovation in tech. It brings developers together to solve real-world problems and create tools that everyone can use. By contributing, you learn, grow, and make technology more accessible.
 
   Open source fosters collaboration, builds communities, and drives innovation. It's not just about coding; it's about making an impact and shaping the future of technology through shared efforts.`;
-  const headerRef = useRef(null);
-  const textRef = useRef(null);
-  const textInView = useInView(textRef, { once: false });
-  const headerInView = useInView(headerRef, { once: false });
+
   return (
     <div>
       <motion.h1
@@ -57,7 +63,7 @@ export function AnimatedBeamMultipleOutputDemo({
       </motion.h1>
       <div
         className={cn(
-          "relative overflow-x-hidden flex h-[500px] lg:w-[700px] sm:w-[370px] -mt-[10rem]  items-center justify-center overflow-hidden rounded-lg d p-10 md:shadow-xl",
+          "relative overflow-x-hidden flex h-[500px] lg:w-[700px] sm:w-[370px] -mt-[10rem] items-center justify-center overflow-hidden rounded-lg p-10 md:shadow-xl",
           className
         )}
         ref={containerRef}
@@ -92,43 +98,49 @@ export function AnimatedBeamMultipleOutputDemo({
           </div>
         </div>
 
-        {/* AnimatedBeams */}
-        <AnimatedBeam
-          containerRef={containerRef}
-          fromRef={div1Ref}
-          toRef={div6Ref}
-          duration={3}
-        />
-        <AnimatedBeam
-          containerRef={containerRef}
-          fromRef={div2Ref}
-          toRef={div6Ref}
-          duration={3}
-        />
-        <AnimatedBeam
-          containerRef={containerRef}
-          fromRef={div3Ref}
-          toRef={div6Ref}
-          duration={3}
-        />
-        <AnimatedBeam
-          containerRef={containerRef}
-          fromRef={div4Ref}
-          toRef={div6Ref}
-          duration={3}
-        />
-        <AnimatedBeam
-          containerRef={containerRef}
-          fromRef={div5Ref}
-          toRef={div6Ref}
-          duration={3}
-        />
-        <AnimatedBeam
-          containerRef={containerRef}
-          fromRef={div6Ref}
-          toRef={div7Ref}
-          duration={3}
-        />
+        {/* AnimatedBeams with proper null checking */}
+        {containerRef.current && (
+          <>
+            <AnimatedBeam
+              containerRef={containerRef as React.RefObject<HTMLElement>}
+              fromRef={div1Ref as React.RefObject<HTMLElement>}
+              toRef={div6Ref as React.RefObject<HTMLElement>}
+              duration={3}
+            />
+            <AnimatedBeam
+              containerRef={containerRef as React.RefObject<HTMLElement>}
+              fromRef={div2Ref as React.RefObject<HTMLElement>}
+              toRef={div6Ref as React.RefObject<HTMLElement>}
+              duration={3}
+            />
+            <AnimatedBeam
+              containerRef={containerRef as React.RefObject<HTMLElement>}
+              fromRef={div3Ref as React.RefObject<HTMLElement>}
+              toRef={div6Ref as React.RefObject<HTMLElement>}
+              duration={3}
+            />
+            {div4Ref.current && (
+              <AnimatedBeam
+                containerRef={containerRef as React.RefObject<HTMLElement>}
+                fromRef={div4Ref as React.RefObject<HTMLElement>}
+                toRef={div6Ref as React.RefObject<HTMLElement>}
+                duration={3}
+              />
+            )}
+            <AnimatedBeam
+              containerRef={containerRef as React.RefObject<HTMLElement>}
+              fromRef={div5Ref as React.RefObject<HTMLElement>}
+              toRef={div6Ref as React.RefObject<HTMLElement>}
+              duration={3}
+            />
+            <AnimatedBeam
+              containerRef={containerRef as React.RefObject<HTMLElement>}
+              fromRef={div6Ref as React.RefObject<HTMLElement>}
+              toRef={div7Ref as React.RefObject<HTMLElement>}
+              duration={3}
+            />
+          </>
+        )}
       </div>
       <motion.div
         className="lg:absolute sm:relative justify-center items-center text-center lg:-mt-[24rem] sm:-mt-[4rem] lg:ml-[40rem] sm:ml-[0rem] z-90"
@@ -142,7 +154,6 @@ export function AnimatedBeamMultipleOutputDemo({
     </div>
   );
 }
-
 const Icons = {
   notion: () => (
     <svg

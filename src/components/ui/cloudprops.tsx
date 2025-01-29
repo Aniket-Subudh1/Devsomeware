@@ -81,7 +81,6 @@ export function IconCloud({ iconSlugs }: DynamicCloudProps) {
   }, [data, theme]);
 
   return (
-    // @ts-expect-error: Cloud component does not accept children prop
     <Cloud {...cloudProps}>
       <>{renderedIcons}</>
     </Cloud>
