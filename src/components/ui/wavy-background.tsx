@@ -28,7 +28,7 @@ export const WavyBackground = ({
 }) => {
   const noise = createNoise3D();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationIdRef = useRef<number>();
+  const animationIdRef = useRef<number | null>(null);
 
   const getSpeed = React.useCallback(
     () => (speed === "slow" ? 0.001 : 0.002),
@@ -37,7 +37,9 @@ export const WavyBackground = ({
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext("2d");
     if (!ctx) {
       console.error("Canvas context not found");
       return;
@@ -73,7 +75,7 @@ export const WavyBackground = ({
 
     const render = () => {
       ctx.fillStyle = backgroundFill || "black";
-      ctx.globalAlpha = Math.min(1, Math.max(0, waveOpacity || 0.5));
+      ctx.globalAlpha = Math.min(1, Math.max(0, waveOpacity));
       ctx.fillRect(0, 0, w, h);
       drawWave(5);
       animationIdRef.current = requestAnimationFrame(render);
@@ -90,7 +92,9 @@ export const WavyBackground = ({
 
     return () => {
       window.removeEventListener("resize", handleResize);
-      cancelAnimationFrame(animationIdRef.current!);
+      if (animationIdRef.current !== null) {
+        cancelAnimationFrame(animationIdRef.current);
+      }
     };
   }, [
     blur,
@@ -106,16 +110,15 @@ export const WavyBackground = ({
   return (
     <div
       className={cn(
-        "relative sm:h-[350px] lg:h-[400px]  flex flex-col items-center justify-center",
+        "relative sm:h-[350px] lg:h-[400px] flex flex-col items-center justify-center",
         containerClassName
       )}
     >
       <canvas
-        className="absolute sm:-mt-10  lg:-mt-2 inset-0 -z-30"
+        className="absolute sm:-mt-10 lg:-mt-2 inset-0 -z-30"
         ref={canvasRef}
         style={{ filter: `blur(${blur}px)` }}
-      ></canvas>
-
+      />
       <div
         className={cn(
           "relative z-10 flex flex-col items-center justify-center",
