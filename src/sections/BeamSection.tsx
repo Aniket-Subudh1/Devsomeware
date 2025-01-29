@@ -98,7 +98,7 @@ export function AnimatedBeamMultipleOutputDemo({
           </div>
         </div>
 
-        {/* AnimatedBeams with proper null checking */}
+
         {containerRef.current && (
           <>
             <AnimatedBeam
