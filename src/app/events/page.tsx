@@ -146,21 +146,21 @@ const ZenotroneCard = () => {
 
         <div className="absolute z-50 lg:top-8 top-5 sm:top-5 sm:right-2 lg:right-8 right-2 lg:mt-10 sm:mt-0 flex gap-3 text-xl text-purple-500">
           <button
-            onClick={() => openLink("https://instagram.com")}
+            onClick={() => openLink("https://www.instagram.com/devsomeware/profilecard/?igsh=MzNlYXF5Z3ZpcWt1")}
             className="transition transform hover:scale-110 hover:text-purple-400 shadow-md shadow-purple-500/50 p-1 lg:p-2 rounded-lg cursor-pointer focus:outline-none"
           >
             <Instagram className="w-3 h-3 lg:w-5 lg:h-5 cursor-pointer" />
           </button>
 
           <button
-            onClick={() => openLink("https://twitter.com")}
+            onClick={() => openLink("https://x.com/DevSomware?t=56J9JXWfTaAaTAUkZ7X_7w&s=09")}
             className="transition transform hover:scale-110 hover:text-purple-400 shadow-md shadow-purple-500/50 p-1 lg:p-2 rounded-lg cursor-pointer focus:outline-none"
           >
             <Twitter className="w-3 h-3 lg:w-5 lg:h-5 cursor-pointer" />
           </button>
 
           <button
-            onClick={() => openLink("https://linkedin.com")}
+            onClick={() => openLink("https://www.linkedin.com/company/devsomeware/")}
             className="transition transform hover:scale-110 hover:text-purple-400 shadow-md shadow-purple-500/50 p-1 lg:p-2 rounded-lg cursor-pointer focus:outline-none"
           >
             <Linkedin className="w-3 h-3 lg:w-5 lg:h-5 cursor-pointer" />
