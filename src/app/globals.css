@@ -70,6 +70,22 @@
   }
 }
 
+@keyframes beamLeft {
+  0% {
+    transform: translateX(0) translateY(-50%);
+  }
+  100% {
+    transform: translateX(-60px) translateY(-50%);
+  }
+}
+@keyframes beamRight {
+  0% {
+    transform: translateX(0) translateY(-50%);
+  }
+  100% {
+    transform: translateX(60px) translateY(-50%);
+  }
+}
 @keyframes bounce {
   0%,
   100% {
@@ -154,7 +170,29 @@
     --chart-5: 340 75% 55%;
   }
 }
-
+.beamLeft {
+  animation: beamLeft 2s ease-in-out infinite alternate;
+}
+.beamRight {
+  animation: beamRight 2s ease-in-out infinite alternate;
+}
+.clip-shape {
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% 60%,
+    85% 100%,
+    0 100%
+  );
+}
+.clip-bottom-shape {
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% 100%,
+    10% 100%
+  );
+}
 @layer base {
   * {
     @apply border-border;
