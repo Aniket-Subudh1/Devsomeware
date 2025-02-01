@@ -2,7 +2,7 @@
 import type React from "react"
 import { motion } from "framer-motion"
 import { CalendarDays, MapPin } from "lucide-react"
-
+import { QRCodeSVG } from "qrcode.react"
 interface EventTicketProps {
   eventName: string
   date: string
@@ -45,7 +45,7 @@ const EventTicket: React.FC<EventTicketProps> = ({ eventName, date, location, ti
             transition={{ delay: 0.4, duration: 0.5 }}
             className="bg-white p-4 rounded-lg inline-block mb-4 shadow-lg"
           >
-            {/* <QRCodeSVG value={ticketId} size={128} /> */}
+            <QRCodeSVG value={ticketId} size={128} />
           </motion.div>
 
           {/* Ticket ID */}

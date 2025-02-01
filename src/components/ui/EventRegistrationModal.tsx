@@ -19,7 +19,9 @@ type EventRegistrationModalProps = {
   date: string;
   highlights: string[];
   icon: LucideIcon;
-  users: {name:string,email:string};
+  users: {
+    id: unknown;name:string,email:string
+};
   eventdata: {userid:string,eventid:string,eventname:string,ticketid:string,email:string,iszentrone:boolean};
 };
 
@@ -75,7 +77,7 @@ export function EventRegistrationModal({
         </div>
       </ModalTrigger>}
       {
-        users.name==""&&<div  className="bg-gray-800 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-default"  onClick={()=>router.push('/login')}><div className="flex items-center justify-center gap-2">
+        users.name==""&&title!="ZeNoTronE Hackathon"&&<div  className="bg-gray-800 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-default"  onClick={()=>router.push('/login')}><div className="flex items-center justify-center gap-2">
         <IconComponent className="w-4 h-4" />
         
       <span>Login Now For Registration</span>
