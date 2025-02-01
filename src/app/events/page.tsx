@@ -250,7 +250,7 @@ const ZenotroneCard = () => {
                  hover:text-purple-200 hover:border-purple-500/40
                  focus:outline-none focus:ring-2 focus:ring-purple-500/50 
                  focus:ring-offset-2 focus:ring-offset-black"
-              onClick={() => router.push("/events/timeline")} // Navigate to event timeline
+              onClick={() => router.push("/events/timeline")} 
             >
               Register Now
             </button>

@@ -1,25 +1,119 @@
 "use client";
 
-import Image from "next/image";
-import React, { useState, useEffect } from "react";
-import { Timeline } from "@/components/ui/timeline";
+import { useEffect, useState, useMemo } from "react";
 import { motion } from "framer-motion";
-
-// Lucide icons:
+import Image from "next/image";
+import { Timeline } from "@/components/ui/timeline";
 import { Ticket, Rocket, MessageCircle, Code, Zap } from "lucide-react";
-
-// Import our new registration modal
 import { EventRegistrationModal } from "@/components/ui/EventRegistrationModal";
 
+interface TypewriterProps {
+  text: string;
+  speed?: number;
+  delay?: number;
+  onComplete?: () => void;
+  showCursor?: boolean;
+  customComponent?: React.ReactNode;
+}
+
+const Typewriter = ({
+  text,
+  speed = 2,
+  delay = 0,
+  onComplete,
+  showCursor = true,
+  customComponent,
+}: TypewriterProps) => {
+  const [displayText, setDisplayText] = useState("");
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isComplete, setIsComplete] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [showCustom, setShowCustom] = useState(false);
+
+  useEffect(() => {
+    if (!hasStarted) {
+      const timeout = setTimeout(() => setHasStarted(true), delay);
+      return () => clearTimeout(timeout);
+    }
+
+    if (currentIndex < text.length && !isComplete) {
+      const timeout = setTimeout(() => {
+        setDisplayText((prev) => prev + text[currentIndex]);
+        setCurrentIndex((prev) => prev + 1);
+      }, speed);
+
+      return () => clearTimeout(timeout);
+    } else if (!isComplete) {
+      setIsComplete(true);
+      setShowCustom(true);
+      onComplete?.();
+    }
+  }, [currentIndex, text, speed, isComplete, onComplete, delay, hasStarted]);
+
+  return (
+    <span className="font-mono tracking-tighter">
+      {displayText}
+      {showCustom && customComponent}
+      {showCursor && !isComplete && hasStarted && (
+        <motion.span
+          className="ml-0.5 text-purple-400"
+          animate={{ opacity: [0, 1] }}
+          transition={{ repeat: Infinity, duration: 0.8 }}
+        >
+          ▌
+        </motion.span>
+      )}
+    </span>
+  );
+};
+
+const LoadingDots = ({ show }: { show: boolean }) => {
+  if (!show) return null;
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="inline-flex space-x-2 ml-2"
+    >
+      {[...Array(3)].map((_, i) => (
+        <motion.span
+          key={i}
+          className="w-1 h-1 rounded-full bg-purple-500 inline-block"
+          animate={{
+            scale: [1, 1.2, 1],
+            opacity: [0.3, 1, 0.3],
+            filter: [
+              'brightness(1) blur(0px)',
+              'brightness(1.3) blur(1px)',
+              'brightness(1) blur(0px)'
+            ]
+          }}
+          transition={{
+            repeat: Infinity,
+            duration: 1.5,
+            delay: i * 0.2,
+            ease: "easeInOut"
+          }}  />
+        ))}
+      </motion.div>
+    );
+  };
 
 const terminalLines = [
-  "> npm init ZeNoTronE",
-  "> npm install AmazingTechEvent --save",
-  "> npm run dev",
-  "> INITIALIZING TECH JOURNEY...",
-  "[ COSMIC_REGISTRATION → OPENING_CEREMONY → TECH_TALKS → ZENOTRONE_HACKTHON ]",
+  { text: "> npm init ZeNoTronE", speed: 10 },
+  { text: "> npm install AmazingTechEvent --save", speed: 10 },
+  { text: "> npm run dev", speed: 10 },
+  {
+    text: "> INITIALIZING TECH JOURNEY",
+    speed: 10,
+    customComponent: <LoadingDots show={true} />,
+  },
+  {
+    text: "[ COSMIC_REGISTRATION → OPENING_CEREMONY → TECH_TALKS → ZENOTRONE_HACKTHON ]",
+    speed: 10,
+  },
 ];
-
 
 type TimelineEvent = {
   title: string;
@@ -33,28 +127,39 @@ type TimelineEvent = {
 
 export default function TimelineDemo() {
   const [showTimeline, setShowTimeline] = useState(false);
-  const [terminalIndex, setTerminalIndex] = useState(0);
-
+  const [visibleLines, setVisibleLines] = useState(0);
   
+
+  // Calculate delays based on previous lines' durations
+  const lineDelays = useMemo(() => {
+    const delays: number[] = [];
+    let totalDelay = 1000; // Initial delay
+
+    terminalLines.forEach((line, index) => {
+      delays[index] = totalDelay;
+      totalDelay += line.text.length * line.speed;
+    });
+
+    return delays;
+  }, []);
+
+  const handleLineComplete = () => {
+    setVisibleLines((prev) => prev + 1);
+  };
+
   useEffect(() => {
-    if (terminalIndex < terminalLines.length) {
-      const timer = setTimeout(() => {
-        setTerminalIndex((prev) => prev + 1);
-      }, 1200);
-      return () => clearTimeout(timer);
-    } else {
+    if (visibleLines === terminalLines.length) {
       setTimeout(() => setShowTimeline(true), 500);
     }
-  }, [terminalIndex]);
+  }, [visibleLines]);
 
- 
   const events: TimelineEvent[] = [
     {
       title: "Cosmic Registration",
       phase: "Stellar Entry Phase",
       date: "Feb 1-15, 2025",
       status: "upcoming",
-      icon: Ticket, // Lucide icon
+      icon: Ticket, 
       highlights: [
         "Registration starts for all events",
         "Limited Seats for Hackathon & Tech Talks",
@@ -106,11 +211,9 @@ export default function TimelineDemo() {
       images: ["/hack.png"],
     },
   ];
-  
 
   return (
     <div className="w-full bg-purple -mt-16 min-h-screen flex flex-col">
-      {/* Terminal effect */}
       <motion.h2
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -123,22 +226,46 @@ export default function TimelineDemo() {
       </motion.h2>
 
       <motion.div
-        className="mb-8 text-left px-6 py-3 rounded-lg text-purple-300 font-mono 
-                   bg-black/50 border border-purple-500 shadow-lg w-full max-w-xl mx-auto"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 1 }}
+        className="mb-8 text-left px-6 py-3 rounded-lg text-purple-300
+                   bg-black/50 border border-purple-500 shadow-lg w-full max-w-xl mx-auto
+                   font-mono tracking-tighter text-sm md:text-base"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{
+          opacity: [0, 1, 0.9, 1],
+          y: 0,
+        }}
+        transition={{
+          duration: 1.5,
+          delay: 0.5,
+          opacity: { times: [0, 0.2, 0.8, 1] },
+        }}
       >
-        {terminalLines.slice(0, terminalIndex + 1).map((line, index) => (
-          <motion.p
-            key={index}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: index * 0.5 }}
-            className="text-sm md:text-base"
-          >
-            {line}
-          </motion.p>
+        <div
+          className="absolute inset-0 pointer-events-none opacity-10"
+          style={{
+            background: `repeating-linear-gradient(0deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px, rgba(255,255,255,0.1) 3px, rgba(255,255,255,0.1) 4px)`,
+          }}
+        />
+        {terminalLines.map((line, index) => (
+          <div key={index} className="leading-loose">
+            {visibleLines > index && (
+              <>
+                {line.text}
+                {line.customComponent}
+              </>
+            )}
+            {visibleLines === index && (
+              <Typewriter
+                text={line.text}
+                speed={line.speed}
+                delay={lineDelays[index]}
+                onComplete={handleLineComplete}
+                showCursor={visibleLines === index}
+                customComponent={line.customComponent}
+              />
+
+            )}
+          </div>
         ))}
       </motion.div>
 
@@ -157,9 +284,7 @@ export default function TimelineDemo() {
           />
         </motion.div>
       )}
-
-      {/* Timeline */}
-      {showTimeline && (
+{showTimeline && (
         <Timeline
           data={events.map((event) => ({
             title: event.title,
@@ -170,65 +295,81 @@ export default function TimelineDemo() {
                 transition={{ duration: 0.8, delay: 0.5 }}
                 className="relative group"
               >
-                {/* Header Section */}
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="p-3 rounded-lg bg-purple-500/10 backdrop-blur-sm">
-                    <event.icon className="w-5 h-5 text-purple-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-purple-100">
-                      {event.title}
-                    </h3>
-                    <p className="text-sm text-purple-300/80">
-                      {event.phase}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Zap className="w-4 h-4 text-purple-400" />
-                      <span className="text-xs font-medium text-purple-400">
-                        {event.date}
-                      </span>
+                <div className="flex flex-col md:flex-row gap-8">
+                  {/* Left Column - Content */}
+                  <div className="flex-1 md:relative">
+                    {" "}
+                    {/* Added relative positioning */}
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="p-3 rounded-lg bg-purple-500/10 backdrop-blur-sm">
+                        <event.icon className="w-5 h-5 text-purple-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-semibold text-purple-100">
+                          {event.title}
+                        </h3>
+                        <p className="text-sm text-purple-300/80">
+                          {event.phase}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Zap className="w-4 h-4 text-purple-400" />
+                          <span className="text-xs font-medium text-purple-400">
+                            {event.date}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <ul className="space-y-2 mb-4">
+                      {" "}
+                      {/* Added bottom margin */}
+                      {event.highlights.map((highlight, i) => (
+                        <li key={i} className="flex items-start">
+                          <Zap className="w-3 h-3 mt-1 mr-2 flex-shrink-0 text-purple-400" />
+                          <span className="text-purple-200/80 text-sm leading-relaxed">
+                            {highlight}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {/* Updated Button Container */}
+                    <div className="md:relative md:right-0 mt-4 md:mt-6  ">
+                      <EventRegistrationModal
+                        title={event.title}
+                        date={event.date}
+                        highlights={event.highlights}
+                        icon={event.icon}
+                        onConfirm={() => {
+                          console.log(`User clicked YES for ${event.title}`);
+                        }}
+                      />
                     </div>
                   </div>
-                </div>
 
-                {/* Content */}
-                <div className="space-y-6">
-                  <p className="text-purple-200/80 text-sm leading-relaxed">
-                    {event.highlights.join(", ")}
-                  </p>
-
-                  {/* If you still want to show images *outside* of the modal, keep this. 
-                      Otherwise, remove it entirely if you want zero images. */}
-                  <div className="grid grid-cols-2 gap-4">
-                    {event.images.map((img, index) => (
-                      <motion.div
-                        key={index}
-                        whileHover={{ scale: 1.02 }}
-                        className="relative h-32 md:h-44 rounded-xl overflow-hidden 
-                                   shadow-[0_0_24px_rgba(147,_51,_234,_0.15)]"
-                      >
-                        <Image
-                          src={img}
-                          alt=""
-                          fill
-                          className="object-cover"
-                        />
-                      </motion.div>
-                    ))}
+                  {/* Right Column - Images */}
+                  <div className="flex-1 order-first md:order-last">
+                    {" "}
+                    {/* Changed order for mobile */}
+                    <div className="grid grid-cols-1 gap-4">
+                      {event.images.map((img, index) => (
+                        <motion.div
+                          key={index}
+                          whileHover={{ scale: 1.02 }}
+                          className="relative h-48 md:h-56 rounded-xl overflow-hidden 
+                             shadow-[0_0_24px_rgba(147,_51,_234,_0.15)]"
+                        >
+                          <Image
+                            src={img}
+                            alt="Event visual"
+                            fill
+                            className="object-cover"
+                            placeholder="blur"
+                            blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+                            loading="lazy"
+                          />
+                        </motion.div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-
-                {/* Registration Button in bottom-right */}
-                <div className="mt-4 text-right">
-                  <EventRegistrationModal
-                    title={event.title}
-                    date={event.date}
-                    highlights={event.highlights}
-                    icon={event.icon} 
-                    onConfirm={() => {
-                      console.log(`User clicked YES for ${event.title}`);
-                    }}
-                  />
                 </div>
               </motion.div>
             ),
