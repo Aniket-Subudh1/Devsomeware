@@ -69,7 +69,7 @@ export function EventRegistrationModal({
   return (
     <Modal>
       {/** Modal Trigger (the button that opens the modal) */}
-      {users.name!=""&&eventdata.userid==undefined&&<ModalTrigger className="bg-gray-800 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition">
+      {users.name!=""&&eventdata.userid==""&&<ModalTrigger className="bg-gray-800 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition">
         <div className="flex items-center gap-2">
           <IconComponent className="w-4 h-4" />
           
@@ -85,7 +85,7 @@ export function EventRegistrationModal({
       </div> 
       }
         {
-        users.name!=""&&eventdata.userid!=undefined&&title!="ZeNoTronE Hackathon"&&<div  className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-not-allowed
+        users.name!=""&&eventdata.userid!=""&&title!="ZeNoTronE Hackathon"&&<div  className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-not-allowed
         " ><div className="flex items-center justify-center gap-2">
         
         
@@ -94,7 +94,7 @@ export function EventRegistrationModal({
       </div> 
       }
 {
-       title=="ZeNoTronE Hackathon"&&eventdata.userid!=undefined&&<div  className="bg-gray-800 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-default"  onClick={()=> window.open("https://www.geeksforgeeks.org/hack-a-thon/zenotrone")}><div className="flex items-center justify-center gap-2">
+       title=="ZeNoTronE Hackathon"&&eventdata.userid!=""&&<div  className="bg-gray-800 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-default"  onClick={()=> window.open("https://www.geeksforgeeks.org/hack-a-thon/zenotrone")}><div className="flex items-center justify-center gap-2">
         <IconComponent className="w-4 h-4" />
         
       <span>Register Now</span>
