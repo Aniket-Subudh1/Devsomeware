@@ -66,7 +66,7 @@ interface User {
   languages: string[];
   frameworks: string[];
   bio: string;
-  id:string;
+  id: string;
 }
 interface EventData {
   userid: string;
@@ -100,17 +100,18 @@ export default async function RootLayout({
         languages: user.languages,
         frameworks: user.frameworks,
         bio: user.bio,
+        //@ts-expect-error: _id is not a standard property of User interface
         id:user?._id,
       };
       const event = verifyResult.event ? (JSON.parse(verifyResult.event) as EventData) : null;
       console.log("layout event is ",event);
       eventdata = {
-        userid: event?.userid,
-        eventid: event?.eventid,
-        eventname: event?.eventname,
-        ticketid: event?.ticketid,
-        email: event?.email,
-        iszentrone: event?.iszentrone,
+        userid: event?.userid || "",
+        eventid: event?.eventid || "",
+        eventname: event?.eventname || "",
+        ticketid: event?.ticketid || "",
+        email: event?.email || "",
+        iszentrone: event?.iszentrone || false,
       }
     } else {
       console.warn(`User verification failed: ${verifyResult.error}`);
