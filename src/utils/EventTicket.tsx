@@ -1,16 +1,19 @@
 "use client"
 import type React from "react"
 import { motion } from "framer-motion"
-import { CalendarDays, MapPin } from "lucide-react"
+import { CalendarDays, MapPin,User } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
+import Image from "next/image"
+
 interface EventTicketProps {
   eventName: string
   date: string
   location: string
   ticketId: string
+  name: string
 }
 
-const EventTicket: React.FC<EventTicketProps> = ({ eventName, date, location, ticketId }) => {
+const EventTicket: React.FC<EventTicketProps> = ({name, date, location, ticketId }) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -18,7 +21,7 @@ const EventTicket: React.FC<EventTicketProps> = ({ eventName, date, location, ti
       transition={{ duration: 0.5 }}
       className="max-w-md w-full mx-auto my-8"
     >
-      <div className="relative overflow-hidden rounded-2xl shadow-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
+      <div className="relative overflow-hidden rounded-2xl bg-purple-900 bg-opacity-40 backdrop-blur-sm shadow-2xl border border-silver-500 border-rounded-lg">
         {/* Ticket Content */}
         <div className="relative p-8">
           <motion.div
@@ -27,7 +30,16 @@ const EventTicket: React.FC<EventTicketProps> = ({ eventName, date, location, ti
             transition={{ delay: 0.2, duration: 0.5 }}
             className="text-white"
           >
-            <h2 className="text-4xl font-extrabold mb-2 tracking-tight">{eventName}</h2>
+            <div className="flex items-center -ml-4 sm:space-x-[15px] lg:space-x-[100px] text-4xl font-extrabold mb-5 tracking-tight">
+  <Image src="/zenotrone.png" width={200} height={50} alt="Zenotrone Logo" />
+  <Image src="/logo.png" width={100} height={50} alt="Zenotrone Logo" />
+</div>
+
+    
+             <div className="flex items-center mb-2">
+              <User className="w-5 h-5 mr-2" />
+              <p className="text-xl">{name}</p>
+            </div>
             <div className="flex items-center mb-2">
               <CalendarDays className="w-5 h-5 mr-2" />
               <p className="text-xl">{date}</p>
@@ -62,6 +74,7 @@ const EventTicket: React.FC<EventTicketProps> = ({ eventName, date, location, ti
         {/* Decorative Elements */}
         <div className="absolute top-0 right-0 w-40 h-40 bg-white bg-opacity-10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
         <div className="absolute bottom-0 left-0 w-60 h-60 bg-white bg-opacity-10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
+        <Image src="/text1.png" width={1000} height={50} alt="textile Logo" />
       </div>
     </motion.div>
   )

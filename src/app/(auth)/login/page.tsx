@@ -5,7 +5,6 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
-import { IconBrandGithub, IconBrandGoogle } from "@tabler/icons-react";
 import { Toaster, toast } from "sonner";
 import Link from "next/link";
 function SignupFormDemo() {
@@ -93,41 +92,14 @@ function SignupFormDemo() {
             <BottomGradient />
           </button>
           <div className="flex justify-center items-center mt-4">
-          <span className="text-sm text-neutral-700 dark:text-neutral-300 ">Don’t have an account? <Link href="/join" className="underline text-green-500 mx-1">Create an account</Link>
+          <span className="text-sm text-neutral-700 dark:text-neutral-300 ">Don’t have an account? <Link href="/joinf" className="underline text-green-500 mx-1">Create an account</Link>
         </span>
         </div>
 
           <div className="bg-gradient-to-r from-transparent via-neutral-300 dark:via-neutral-700 to-transparent my-8 h-[1px] w-full" />
 
           <div className="flex flex-col space-y-4">
-            <button
-              className=" relative group/btn flex space-x-2 items-center justify-start px-4 w-full text-black rounded-md h-10 font-medium shadow-input bg-gray-50 dark:bg-zinc-900 dark:shadow-[0px_0px_1px_1px_var(--neutral-800)]"
-              onClick={() => {
-                toast.info(
-                  "Github login is not available yet. Please try another method."
-                );
-              }}
-            >
-              <IconBrandGithub className="h-4 w-4 text-neutral-800 dark:text-neutral-300" />
-              <span className="text-neutral-700 dark:text-neutral-300 text-sm">
-                GitHub
-              </span>
-              <BottomGradient />
-            </button>
-            <button
-              className=" relative group/btn flex space-x-2 items-center justify-start px-4 w-full text-black rounded-md h-10 font-medium shadow-input bg-gray-50 dark:bg-zinc-900 dark:shadow-[0px_0px_1px_1px_var(--neutral-800)]"
-              onClick={() => {
-                toast.info(
-                  "Google login is not available yet. Please try another method."
-                );
-              }}
-            >
-              <IconBrandGoogle className="h-4 w-4 text-neutral-800 dark:text-neutral-300" />
-              <span className="text-neutral-700 dark:text-neutral-300 text-sm">
-                Google
-              </span>
-              <BottomGradient />
-            </button>
+      
           </div>
         </div>
       </div>

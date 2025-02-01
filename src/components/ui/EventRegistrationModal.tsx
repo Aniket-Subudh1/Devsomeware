@@ -85,7 +85,7 @@ export function EventRegistrationModal({
       </div> 
       }
         {
-        users.name!=""&&eventdata.userid!=""&&title!="ZeNoTronE Hackathon"&&<div  className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-not-allowed
+        users.name!=""&&eventdata.userid!=""&&title!="ZeNoTronE Hackathon"&&<div  className="bg-gray-800 text-purple-500 px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-not-allowed
         " ><div className="flex items-center justify-center gap-2">
         
         

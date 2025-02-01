@@ -10,18 +10,18 @@ import { FaLinkedin } from "react-icons/fa";
 import { FaCode } from "react-icons/fa6";
 import { FaReact } from "react-icons/fa";
 import { FiUserCheck } from "react-icons/fi";
-import { FaRegQuestionCircle } from "react-icons/fa";
-import { BsFillPatchQuestionFill } from "react-icons/bs";
 import { Toaster, toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const steps = ["Basic Info", "Technical BG", "Intentions", "Preview"];
+
+const steps = ["Basic Info", "Technical BG", "Preview"];
 
 const Joiningform = () => {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -34,6 +34,7 @@ const Joiningform = () => {
     whyJoin: "",
     expectations: "",
   });
+
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   const handleNext = () => {
@@ -77,6 +78,7 @@ const Joiningform = () => {
 
   const validateStep = () => {
     const stepErrors: { [key: string]: string } = {};
+
     switch (currentStep) {
       case 0:
         if (!formData.name) stepErrors.name = "Name is required.";
@@ -98,23 +100,22 @@ const Joiningform = () => {
         if (!formData.linkedin) {
           stepErrors.linkedin = "LinkedIn link is required.";
         } else if (
-          !/^https:\/\/www\.linkedin\.com\/in\/.+$/.test(formData.linkedin)
+          !/^https:\/\/www\.linkedin\.com\/.+$/.test(formData.linkedin)
         ) {
           stepErrors.linkedin = "Invalid LinkedIn URL.";
         }
         break;
+
       case 1:
         if (!formData.languages)
           stepErrors.languages = "Languages are required.";
         if (!formData.frameworks)
           stepErrors.frameworks = "Frameworks are required.";
         break;
-      case 2:
-        if (!formData.whyJoin)
-          stepErrors.whyJoin = "Please explain why you want to join.";
-        if (!formData.expectations)
-          stepErrors.expectations = "Please share your expectations.";
-        break;
+
+      // We remove the intention validations (case 2) completely.
+      // The 3rd step is now "Preview," so there's no validation needed here.
+
       default:
         break;
     }
@@ -125,6 +126,7 @@ const Joiningform = () => {
 
   const handleSubmit = async () => {
     setLoading(true);
+    // Passing empty strings for `whyJoin` and `expectations`.
     const fetchdata = await fetch("/api/signup", {
       method: "POST",
       headers: {
@@ -139,8 +141,9 @@ const Joiningform = () => {
         languages: formData.languages,
         frameworks: formData.frameworks,
         interests: formData.interests,
-        why: formData.whyJoin,
-        expectations: formData.expectations,
+        // just send empty placeholders:
+        why: "",
+        expectations: "",
       }),
     });
     const response = await fetchdata.json();
@@ -162,6 +165,7 @@ const Joiningform = () => {
 
   const renderStepContent = () => {
     switch (currentStep) {
+      // Step 0: Basic Info
       case 0:
         return (
           <div>
@@ -237,6 +241,8 @@ const Joiningform = () => {
             </LabelInputContainer>
           </div>
         );
+
+      // Step 1: Technical BG
       case 1:
         return (
           <div>
@@ -295,46 +301,9 @@ const Joiningform = () => {
             </LabelInputContainer>
           </div>
         );
+
+      // Step 2: Preview (previously step 3)
       case 2:
-        return (
-          <div>
-            <LabelInputContainer>
-              <Label htmlFor="whyJoin">
-                Why do you want to join Devsomeware?
-              </Label>
-              <textarea
-                id="whyJoin"
-                name="whyJoin"
-                placeholder="Explain briefly"
-                value={formData.whyJoin}
-                onChange={handleChange}
-                className="border px-4 py-2 w-full"
-                rows={4}
-              ></textarea>
-              {errors.whyJoin && (
-                <p className="text-red-500 text-sm">{errors.whyJoin}</p>
-              )}
-            </LabelInputContainer>
-            <LabelInputContainer>
-              <Label htmlFor="expectations">
-                What are your expectations from Devsomeware?
-              </Label>
-              <textarea
-                id="expectations"
-                name="expectations"
-                placeholder="Explain briefly"
-                value={formData.expectations}
-                onChange={handleChange}
-                className="border px-4 py-2 w-full"
-                rows={4}
-              ></textarea>
-              {errors.expectations && (
-                <p className="text-red-500 text-sm">{errors.expectations}</p>
-              )}
-            </LabelInputContainer>
-          </div>
-        );
-      case 3:
         return (
           <div className="">
             <h3 className="text-2xl font-bold text-center mb-6">Preview</h3>
@@ -349,8 +318,8 @@ const Joiningform = () => {
                   <strong className="mx-1">Name:</strong> {formData.name}
                 </p>
                 <p className="mb-2 break-words flex justify-center items-center">
-                  <MdOutlineEmail /> <strong className="mx-1">Email:</strong>{" "}
-                  {formData.email}
+                  <MdOutlineEmail />
+                  <strong className="mx-1">Email:</strong> {formData.email}
                 </p>
                 <p className="mb-2 break-words flex justify-center items-center flex-col">
                   <FaGithub className="h-4 w-4" />
@@ -399,26 +368,10 @@ const Joiningform = () => {
                   {formData.interests.join(", ")}
                 </p>
               </div>
-
-              {/* Motivations Box - spans full width on large screens */}
-              <div className="p-4 border rounded-lg shadow-md bg-gray-50 dark:bg-gray-800 lg:col-span-2 max-w-xl w-full">
-                <h4 className="text-lg font-semibold mb-3 text-green-600">
-                  Motivations
-                </h4>
-                <p className="mb-2 break-words">
-                  <FaRegQuestionCircle className="inline-block h-5 w-5" />
-                  <strong className="mx-1 inline-block">Why Join:</strong>
-                  {formData.whyJoin}
-                </p>
-                <p className="break-words">
-                  <BsFillPatchQuestionFill className="inline-block h-5 w-5" />
-                  <strong className="mx-1 inline-block">Expectations:</strong>
-                  {formData.expectations}
-                </p>
-              </div>
             </div>
           </div>
         );
+
       default:
         return null;
     }
@@ -434,13 +387,13 @@ const Joiningform = () => {
           <h2 className="font-bold text-3xl text-center text-neutral-800 dark:text-neutral-200 mb-4">
             Join Devsomeware as Member
           </h2>
-          <div className="flex flex-col items-center mb-5">
+          <div className="flex flex-col ml-5 -mr-5 items-center overflow-hidden mb-5">
             {/* Progress Bar */}
-            <div className="flex items-center justify-between w-full sm:ml-[2rem] lg:ml-[8rem] max-w-4xl my-2">
+            <div className="flex items-center justify-between w-full  sm:ml-[2rem] lg:ml-[8rem] max-w-4xl my-2">
               {steps.map((step, index) => (
                 <div key={index} className="flex items-center w-full">
                   <div
-                    className={`relative flex items-center justify-center w-12 h-12 rounded-full ${
+                    className={`relative flex items-center  justify-center w-12 h-12 rounded-full ${
                       index <= currentStep
                         ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                         : "bg-gray-300 text-gray-500"
@@ -465,7 +418,7 @@ const Joiningform = () => {
               {steps.map((step, index) => (
                 <div
                   key={index}
-                  className={`text-center text-sm ${
+                  className={` mr-12 text-sm ${
                     index === currentStep
                       ? "text-purple-600 font-semibold"
                       : "text-gray-500"
@@ -493,6 +446,7 @@ const Joiningform = () => {
               &larr; Previous
               <BottomGradient />
             </button>
+
             {/* Next or Submit Button */}
             {currentStep === steps.length - 1 ? (
               <button
