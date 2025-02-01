@@ -39,7 +39,7 @@ export function EventRegistrationModal({
   console.log(users);
   const onConfirm = async() => {
     if(title=="ZeNoTronE Hackathon"){
-    window.open("https://www.geeksforgeeks.org/");
+    window.open("https://www.geeksforgeeks.org/hack-a-thon/zenotrone");
     return;
     }
     try{
@@ -49,7 +49,7 @@ export function EventRegistrationModal({
       headers:{
         "Content-Type":"application/json"
       },
-      body:JSON.stringify({id:users.id,eventid:"754293ssir",eventname:"zenetrone",email:users.email})
+      body:JSON.stringify({id:users.id,eventid:"754293ssir",eventname:"zenetrone",email:users.email,name:users.name})
      })
       const data = await senddata.json();
       setLoading(false);
@@ -94,7 +94,7 @@ export function EventRegistrationModal({
       </div> 
       }
 {
-       title=="ZeNoTronE Hackathon"&&eventdata.userid!=undefined&&<div  className="bg-gray-800 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-default"  onClick={()=> window.open("https://www.geeksforgeeks.org/")}><div className="flex items-center justify-center gap-2">
+       title=="ZeNoTronE Hackathon"&&eventdata.userid!=undefined&&<div  className="bg-gray-800 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-default"  onClick={()=> window.open("https://www.geeksforgeeks.org/hack-a-thon/zenotrone")}><div className="flex items-center justify-center gap-2">
         <IconComponent className="w-4 h-4" />
         
       <span>Register Now</span>
