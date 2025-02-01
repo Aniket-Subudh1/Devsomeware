@@ -66,6 +66,15 @@ interface User {
   languages: string[];
   frameworks: string[];
   bio: string;
+  id:string;
+}
+interface EventData {
+  userid: string;
+  eventid: string;
+  eventname: string;
+  ticketid: string;
+  email: string;
+  iszentrone: boolean;
 }
 
 export default async function RootLayout({
@@ -74,6 +83,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   let initialUserData = null;
+  let eventdata = null;
 
   try {
     const verifyResult = await VerifyUser();
@@ -90,7 +100,18 @@ export default async function RootLayout({
         languages: user.languages,
         frameworks: user.frameworks,
         bio: user.bio,
+        id:user?._id,
       };
+      const event = verifyResult.event ? (JSON.parse(verifyResult.event) as EventData) : null;
+      console.log("layout event is ",event);
+      eventdata = {
+        userid: event?.userid,
+        eventid: event?.eventid,
+        eventname: event?.eventname,
+        ticketid: event?.ticketid,
+        email: event?.email,
+        iszentrone: event?.iszentrone,
+      }
     } else {
       console.warn(`User verification failed: ${verifyResult.error}`);
     }
@@ -122,7 +143,7 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <StoreProvider initialUserData={initialUserData}>
+          <StoreProvider initialUserData={initialUserData} eventdata={eventdata || { userid: "", eventid: "", eventname: "", ticketid: "", email: "", iszentrone: false }}>
             <ClientWrapper>{children}</ClientWrapper>
           </StoreProvider>
         </ThemeProvider>

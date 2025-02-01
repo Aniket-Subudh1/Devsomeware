@@ -4,9 +4,10 @@ import { useEffect, useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { Timeline } from "@/components/ui/timeline";
-import { Ticket, Rocket, MessageCircle, Code, Zap } from "lucide-react";
+import { Ticket, Rocket, MessageCircle, Code, Zap, LucideIcon } from "lucide-react";
 import { EventRegistrationModal } from "@/components/ui/EventRegistrationModal";
-
+import { useAppSelector} from "@/lib/hook";
+import { Toaster } from "sonner";
 interface TypewriterProps {
   text: string;
   speed?: number;
@@ -29,7 +30,7 @@ const Typewriter = ({
   const [isComplete, setIsComplete] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
-
+  
   useEffect(() => {
     if (!hasStarted) {
       const timeout = setTimeout(() => setHasStarted(true), delay);
@@ -101,9 +102,9 @@ const LoadingDots = ({ show }: { show: boolean }) => {
   };
 
 const terminalLines = [
-  { text: "> npm init ZeNoTronE", speed: 10 },
+  { text: "> npm init ZeNoTronE", speed: 5 },
   { text: "> npm install AmazingTechEvent --save", speed: 10 },
-  { text: "> npm run dev", speed: 10 },
+  { text: "> npm run dev", speed: 5 },
   {
     text: "> INITIALIZING TECH JOURNEY",
     speed: 10,
@@ -111,7 +112,7 @@ const terminalLines = [
   },
   {
     text: "[ COSMIC_REGISTRATION → OPENING_CEREMONY → TECH_TALKS → ZENOTRONE_HACKTHON ]",
-    speed: 10,
+    speed: 5,
   },
 ];
 
@@ -120,7 +121,7 @@ type TimelineEvent = {
   phase: string;
   date: string;
   status: "completed" | "ongoing" | "upcoming";
-  icon: any;
+  icon: LucideIcon;
   highlights: string[];
   images: string[];
 };
@@ -128,8 +129,8 @@ type TimelineEvent = {
 export default function TimelineDemo() {
   const [showTimeline, setShowTimeline] = useState(false);
   const [visibleLines, setVisibleLines] = useState(0);
-  
-
+  const users = useAppSelector((state) => state.user);
+  const eventdata = useAppSelector((state) => state.event);
   // Calculate delays based on previous lines' durations
   const lineDelays = useMemo(() => {
     const delays: number[] = [];
@@ -214,6 +215,7 @@ export default function TimelineDemo() {
 
   return (
     <div className="w-full bg-purple -mt-16 min-h-screen flex flex-col">
+      <Toaster richColors/>
       <motion.h2
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -262,6 +264,7 @@ export default function TimelineDemo() {
                 onComplete={handleLineComplete}
                 showCursor={visibleLines === index}
                 customComponent={line.customComponent}
+               
               />
 
             )}
@@ -338,9 +341,8 @@ export default function TimelineDemo() {
                         date={event.date}
                         highlights={event.highlights}
                         icon={event.icon}
-                        onConfirm={() => {
-                          console.log(`User clicked YES for ${event.title}`);
-                        }}
+                        users={users}
+                        eventdata={eventdata}
                       />
                     </div>
                   </div>

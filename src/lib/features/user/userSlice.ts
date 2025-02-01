@@ -12,6 +12,7 @@ interface userState {
   frameworks:string,
   isauth:boolean,
   bio:string,
+  id:string;
 }
 
 // Define the initial state using that type
@@ -26,10 +27,11 @@ const initialState: userState = {
     frameworks:"",
     isauth:false,
     bio:"",
+    id:"",
 }
 
 export const userSlice = createSlice({
-  name: 'counter',
+  name: 'user',
   // `createSlice` will infer the state type from the `initialState` argument
   initialState,
   reducers: {
@@ -44,6 +46,7 @@ export const userSlice = createSlice({
     state.frameworks=action.payload.frameworks
     state.isauth=action.payload.isauth
     state.bio=action.payload.bio
+    state.id=action.payload.id
    },
   },
 })
