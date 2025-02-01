@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, {  useState } from "react";
 import { toast } from "sonner";
+import { useAppDispatch } from "@/lib/hook";
+import {add} from "../../lib/features/events/eventSlice";
 import {
   Modal,
   ModalBody,
@@ -30,6 +32,7 @@ export function EventRegistrationModal({
   eventdata
 }: EventRegistrationModalProps) {
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const [loading, setLoading] = useState(false);
   console.log(users);
   const onConfirm = async() => {
@@ -50,6 +53,7 @@ export function EventRegistrationModal({
       setLoading(false);
       if(data.success){
       toast.success(data.message);
+      dispatch(add({userid:data.event.userid,eventid:data.event.eventid,eventname:data.event.eventname,ticketid:data.event.ticketid,email:data.event.email,iszentrone:data.event.iszentrone}));
       }
       else{
        toast.error(data.message); 
@@ -79,7 +83,8 @@ export function EventRegistrationModal({
       </div> 
       }
         {
-        users.name!=""&&eventdata.userid!=undefined&&<div  className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-default" ><div className="flex items-center justify-center gap-2">
+        users.name!=""&&eventdata.userid!=undefined&&title!="ZeNoTronE Hackathon"&&<div  className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition cursor-not-allowed
+        " ><div className="flex items-center justify-center gap-2">
         
         
       <span className="">Registered</span>

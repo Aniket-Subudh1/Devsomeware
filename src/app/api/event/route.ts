@@ -24,7 +24,7 @@ export const POST = async (req:NextRequest) => {
         email:data.email,
     });
     await newEvent.save();
-    return NextResponse.json({message:"Event Registered Successfully",success:true});
+    return NextResponse.json({message:"Event Registered Successfully",success:true,event:newEvent});
 }
     catch(err){
         console.log(err);
