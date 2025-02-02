@@ -126,7 +126,7 @@ const ZenotroneCard = () => {
         {/* Top Brand & Icons */}
         <div className="absolute top-4 left-4 text-lg font-bold">
           <Image
-            src={"/zenotrone.png"}
+            src={"https://res.cloudinary.com/db0x5vhbk/image/upload/v1738404422/kzcvx5u7yl4tdbcs9ajm.png"}
             width={200}
             height={40}
             alt="Zenotrone"
@@ -136,7 +136,7 @@ const ZenotroneCard = () => {
 
         <div className=" absolute flex mt-5 lg:ml-[1050px] ml-[350px]  sm:ml-[200px] md:ml-[1000px]">
           <Image
-            src={"/logo.png"}
+            src={"https://res.cloudinary.com/db0x5vhbk/image/upload/v1738515816/ptstyvnggxzyb9xatpfv.png"}
             width={100}
             height={20}
             alt="logo"
@@ -172,7 +172,7 @@ const ZenotroneCard = () => {
           {/* Event Photo Placeholder */}
           <div className="w-full border-rounded-xl mb-[40px] border-silver-500 mt-5 md:w-3/4 lg:h-[350px] sm:h-[250px] flex justify-center mb-4 md:mb-24">
             <Image
-              src={"/poster.png"}
+              src={"https://res.cloudinary.com/db0x5vhbk/image/upload/v1738404487/fbf1lb6dgxjeg9v9jg3j.png"}
               width={1000}
               height={100}
               alt="Event"
@@ -260,7 +260,7 @@ const ZenotroneCard = () => {
         {/* Bottom decorative shape */}
         <div className="absolute -bottom-[70px] md:bottom-0 lg:bottom-0 sm:h-[100px] h-[100px] lg:h-[90px] left-0 w-full">
           <Image
-            src={"/text1.png"}
+            src={"https://res.cloudinary.com/db0x5vhbk/image/upload/v1738516094/uiszlmu5jm2ijupnqyav.png"}
             width={1000}
             height={80}
             alt="Zenotrone"

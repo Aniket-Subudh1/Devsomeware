@@ -1,237 +1,251 @@
-"use client";
-import React from "react";
-import Image from "next/image";
-import Swagat from "@/assets/swagat.jpg";
-import Basir from "@/assets/basir.jpg";
-import Bhawani from "@/assets/bhawani.jpg";
-import Aniket from "@/assets/aniket.jpg";
+"use client"
+import { useState, useEffect } from "react"
+import { motion, useAnimation } from "framer-motion";
+import { useRouter } from "next/navigation";
+import { Cover } from "@/components/ui/cover";
+import Swagat from "@/assets/swagat.jpg"
+import Basir from "@/assets/basir.jpg"
+import Aniket from "@/assets/aniket.jpg"
+import Ankit from "@/assets/ankit.jpg"
+import Nyaya from "@/assets/nyaya.jpg"
+import Phani from "@/assets/phani.jpeg"
+import Abhisek from "@/assets/abhishek.jpeg"
 import Disha from "@/assets/disha.jpg";
-import Ankit from "@/assets/ankit.jpg";
 import Khawar from "@/assets/khawar.jpeg";
 import Aryan from "@/assets/aryan.jpg";
-import WatermarkLogo from "@/assets/logo.png";
 import Mir from "@/assets/mir.jpg";
-import Nyaya from "@/assets/nyaya.jpg";
-import Saneev from "@/assets/saneev.webp";
+import Smruti from "@/assets/smruti.jpeg";
+import Bhawani from "@/assets/bhawani.jpg";
 import Asutosh from "@/assets/asutosh.jpg";
 import Priyanshu from "@/assets/priyanshu.jpg";
-import { FaGithub, FaLinkedin } from "react-icons/fa";
-import { StaticImageData } from "next/image";
-import { TextHoverEffect } from "@/components/ui/text-hover-effect";
-
-const MentorCard = () => (
-  <div className="w-[350px] relative mt-4 h-[430px] group mx-auto dark:bg-black bg-white dark:border-2 border-purple-500 border rounded-md dark:text-white text-black flex flex-col">
-    <div className="absolute top-2 left-2 w-[5rem] h-10 z-10 opacity-100">
-      <Image
-        src={WatermarkLogo}
-        alt="Watermark"
-        layout="responsive"
-        objectFit="contain"
-      />
-    </div>
-    {/* Image */}
-    <div className="w-full rounded-t-md h-[350px] group-hover:h-[410px] overflow-hidden transition-all duration-300">
-      <Image
-        src={Saneev}
-        alt="mentor"
-        width={600}
-        height={600}
-        className="h-full w-full scale-105 group-hover:scale-100 grayscale group-hover:grayscale-0 object-cover transition-all duration-300"
-      />
-    </div>
-    {/* Info */}
-    <article className="relative overflow-hidden flex-grow">
-      <div className="info p-2 translate-y-0 group-hover:-translate-y-20 transition-all duration-300">
-        <p className="md:text-2xl font-semibold">Saneev Kumar Das</p>
-        <p className="sm:text-base text-sm">Mentor &amp; AI/ML Expert</p>
-      </div>
-      {/* Role on hover */}
-      <button className="absolute h-10 -bottom-8 opacity-0 group-hover:opacity-100 cursor-pointer group-hover:bottom-3 text-3xl font-medium transition-all duration-300 w-full text-center">
-        Mentor &amp; AI/ML Expert
-      </button>
-    </article>
-  </div>
-);
-
-const MemberCard = ({
-  name,
-  role,
-  image,
-  github,
-  linkedin,
-}: {
-  name: string;
-  role: string;
-  image: StaticImageData;
-  github: string;
-  linkedin: string;
-}) => (
-  <div className="w-[350px] relative mt-4 h-[430px] group mx-auto dark:bg-black bg-white dark:border-2 border-purple-500 border rounded-md dark:text-white text-black flex flex-col">
-    {/* Watermark */}
-    <div className="absolute top-2 left-2 w-[5rem] h-10 z-10 opacity-100">
-      <Image
-        src={WatermarkLogo}
-        alt="Watermark"
-        layout="responsive"
-        objectFit="contain"
-      />
-    </div>
-    {/* Social Icons */}
-    <div className="absolute top-2 right-2 flex flex-col gap-2 z-20">
-      <a
-        href={github}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="p-2 bg-white dark:bg-black border border-purple-500 rounded-full hover:scale-110 transition-transform flex items-center justify-center"
-      >
-        <FaGithub className="text-purple-500 text-lg" />
-      </a>
-      <a
-        href={linkedin}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="p-2 bg-white dark:bg-black border border-purple-500 rounded-full hover:scale-110 transition-transform flex items-center justify-center"
-      >
-        <FaLinkedin className="text-purple-500 text-lg" />
-      </a>
-    </div>
-    {/* Image */}
-    <div className="w-full rounded-t-md h-[350px] group-hover:h-[410px] overflow-hidden transition-all duration-300">
-      <Image
-        src={image}
-        alt={name}
-        width={600}
-        height={600}
-        className="h-full w-full scale-105 group-hover:scale-100 grayscale group-hover:grayscale-0 object-cover transition-all duration-300"
-      />
-    </div>
-    {/* Info */}
-    <article className="relative overflow-hidden flex-grow">
-      <div className="info p-2 translate-y-0 group-hover:-translate-y-20 transition-all duration-300">
-        <p className="md:text-2xl font-semibold">{name}</p>
-        <p className="sm:text-base text-sm">{role}</p>
-      </div>
-      {/* Role on hover */}
-      <button className="absolute h-10 -bottom-8 opacity-0 group-hover:opacity-100 cursor-pointer group-hover:bottom-3 text-3xl font-medium transition-all duration-300 w-full text-center">
-        {role}
-      </button>
-    </article>
-  </div>
-);
+import { MentorCard, MemberCard } from "@/components/ui/card-components"
+import { useInView } from "react-intersection-observer";
 
 export default function TeamPage() {
+  const [scrollY, setScrollY] = useState(0)
+
+  useEffect(() => {
+    const handleScroll = () => setScrollY(window.scrollY)
+    window.addEventListener("scroll", handleScroll)
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [])
+  const controls = useAnimation();
+  const { ref, inView } = useInView({
+    threshold: 0.2,
+  });
+  const headingVariants = {
+    hidden: { opacity: 0, y: -50 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
+  };
+  const router = useRouter();
+
+  useEffect(() => {
+    if (inView) {
+      controls.start("visible");
+    } else {
+      controls.start("hidden");
+    }
+  }, [controls, inView]);
   return (
-    <div className="h-auto w-full  dark:bg-black bg-white dark:bg-dot-white/[0.2] bg-dot-black/[0.2] relative flex flex-col items-center justify-center lg:-mt-20 sm:mt-3 overflow-hidden rounded-md">
-      <TextHoverEffect text="Meet Our Team" />
+    <div className="min-h-screen w-full bg-black flex  z-20  flex-col items-center justify-start p-10 relative overflow-hidden">
+      {/* Dynamic Background */}
+      <div
+        className="fixed inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]"
+        style={{
+          transform: `translateY(${scrollY * 0.1}px)`,
+          opacity: 1 - scrollY * 0.002,
+        }}
+      ></div>
 
-      {/* Mentor Section */}
-      <div className="lg:-mt-20 sm:-mt-2 ">
-        <h2 className="text-white text-3xl font-bold mb-8 text-center">
-          Mentor
-        </h2>
-        <MentorCard />
-      </div>
-      {/* Core Community Members */}
-      <div className="mt-16 mb-10">
-        <h2 className="text-white text-3xl font-bold mb-8 text-center">
-          Core Community Members
-        </h2>
-        <div className="flex flex-wrap justify-center gap-8">
-          <MemberCard
-            name="Basir Khan"
-            role="Core Community Lead"
-            image={Basir}
-            github="https://github.com/BasirKhan418"
-            linkedin="https://www.linkedin.com/in/basir-khan-5aa62b258/"
-          />
-          <MemberCard
-            name="Aniket Subudhi"
-            role="Core Community Lead"
-            image={Aniket}
-            github="https://github.com/Aniket-Subudh1"
-            linkedin="https://www.linkedin.com/in/aniket-subudh1/"
-          />
-          <MemberCard
-            name="Swagat Kumar Dash"
-            role="Core Community Lead"
-            image={Swagat}
-            github="https://github.com/Swagat-D"
-            linkedin="https://www.linkedin.com/in/swagatdash15/"
-          />
-          <MemberCard
-            name="Ankit Kumar Yadav"
-            role="Core Community Lead"
-            image={Ankit}
-            github="https://github.com/BoundlessKris"
-            linkedin="https://www.linkedin.com/in/ankit-kumar-yadav-041227270/"
-          />
-          <MemberCard
-            name="Nyayabrata Das"
-            role="Core Community Lead"
-            image={Nyaya}
-            github="https://github.com/Nyayabrata01"
-            linkedin="https://www.linkedin.com/in/nyayabrata-das-544642294/"
-          />
+      {/* Purple Gradient Overlay */}
+      <div className="fixed inset-0 bg-gradient-to-br from-purple-900/40 to-black pointer-events-none"></div>
+
+      {/* Glass Effect Background */}
+      <div className="fixed inset-0 backdrop-blur-sm bg-black/30 pointer-events-none"></div>
+
+      {/* Content Container */}
+      <div className="relative z-10 w-full max-w-7xl">
+       
+      <motion.h1
+        ref={ref}
+        initial="hidden"
+        animate={controls}
+        variants={headingVariants}
+        className="text-4xl bg-gradient-to-b text-transparent bg-clip-text from-neutral-200 to-purple-900 md:text-4xl lg:text-6xl font-semibold max-w-7xl mx-auto text-center mt-6 relative z-20 py-6"
+      >
+        MEET OUR <Cover>TEAM</Cover>
+      </motion.h1>
+       
+
+        {/* Mentor & Core Community Section */}
+        <div className="w-full mt-10">
+          <h2 className="text-white text-3xl font-bold mb-12 text-center animate-fadeIn">
+            Mentor &amp; Core Community
+          </h2>
+          <div className="flex  ml-[980px] justify-end w-full hidden lg:block">
+  <button
+    className="inline-flex  lg:h-16 sm:h-10 animate-shimmer items-center justify-center rounded-md border border-purple-500/20  
+       bg-[linear-gradient(110deg,#000103,45%,#4c1d95,55%,#000103)] bg-[length:200%_100%] 
+       px-6 font-medium lg:text-xl sm:text-md text-purple-300 transition-colors 
+       hover:bg-[linear-gradient(110deg,#000103,45%,#6d28d9,55%,#000103)] 
+       hover:text-purple-200 hover:border-purple-500/40
+       focus:outline-none focus:ring-2 focus:ring-purple-500/50 
+       focus:ring-offset-2 focus:ring-offset-black"
+    onClick={() => router.push("/team/leads")} 
+  >
+    View Leads &amp; Co-Leads
+  </button>
+</div>
+
+
+          <div className="flex flex-wrap justify-center gap-12">
+            <MentorCard />
+            <MemberCard
+              name="Basir Khan"
+              role="Core Community Lead"
+              image={Basir}
+              github="https://github.com/BasirKhan418"
+              linkedin="https://www.linkedin.com/in/basir-khan-5aa62b258/"
+            />
+            <MemberCard
+              name="Aniket Subudhi"
+              role="Core Community Lead"
+              image={Aniket}
+              github="https://github.com/Aniket-Subudh1"
+              linkedin="https://www.linkedin.com/in/aniket-subudh1/"
+            />
+            <MemberCard
+              name="Ankit Kumar Yadav"
+              role="Core Community Lead"
+              image={Ankit}
+              github="https://github.com/BoundlessKris"
+              linkedin="https://www.linkedin.com/in/ankit-kumar-yadav-041227270/"
+            />
+            <MemberCard
+              name="Swagat Kumar Dash"
+              role="Core Community Lead"
+              image={Swagat}
+              github="https://github.com/Swagat-D"
+              linkedin="https://www.linkedin.com/in/swagatdash15/"
+            />
+            
+            <MemberCard
+              name="Nyayabrata Das"
+              role="Core Community Lead"
+              image={Nyaya}
+              github="https://github.com/Nyayabrata01"
+              linkedin="https://www.linkedin.com/in/nyayabrata-das-544642294/"
+            />
+          </div>
+          <h2 className="text-white text-3xl font-bold mt-24 mb-12 text-center animate-fadeIn">
+            Core Community Members
+          </h2>
+          <div className="flex flex-wrap justify-center gap-12">
+            <MemberCard
+              name="Asutosh Parida"
+              role="Core Community Member"
+              image={Asutosh}
+              github="https://github.com/asutoshparida8658"
+              linkedin="https://www.linkedin.com/in/asutosh-parida-b3b686250"
+            />
+            <MemberCard
+              name="Mir Sadab Ali"
+              role="Core Community Member"
+              image={Mir}
+              github="https://github.com/SadabAli"
+              linkedin="https://www.linkedin.com/in/mir-sadab-ali-b29157268/"
+            />
+            <MemberCard
+              name="Priyanshu Kumar"
+              role="Core Community Member"
+              image={Priyanshu}
+              github="https://github.com/Priyanshu270603"
+              linkedin="https://www.linkedin.com/in/priyanshu-kumar-305902303"
+            />
+            <MemberCard
+              name="Smrutirupa Parida"
+              role="Core Community Member"
+              image={Smruti}
+              github="https://github.com/"
+              linkedin="https://in.linkedin.com/in/smrutirupa-parida-594758294"
+            />
+            <MemberCard
+              name="Phani Bhusan Mohanty"
+              role="Core Community Member"
+              image={Phani}
+              github="https://github.com/Phani2425"
+              linkedin="https://www.linkedin.com/in/phani-bhusan-mohanty-370b93237"
+            />
+            <MemberCard
+              name="Disha Mishra"
+              role="Core Community Member"
+              image={Disha}
+              github="https://github.com/dishaamishraa"
+              linkedin="https://www.linkedin.com/in/disha-mishra-699245279/"
+            />
+            <MemberCard
+              name="Aryan Ashima Swain"
+              role="Core Community Member"
+              image={Aryan}
+              github="https://github.com/SARYAN23"
+              linkedin="https://www.linkedin.com/in/aryan-ashima-swain-8727b4300/"
+            />
+            
+            <MemberCard
+              name="Bhawani Sankar Das"
+              role="Core Community Member"
+              image={Bhawani}
+              github="https://github.com/BhawaniDas"
+              linkedin="https://www.linkedin.com/in/bhawani-sankar-das-023889336/"
+            />
+            <MemberCard
+              name="Khawar Ahmed Khan"
+              role="Core Community Member"
+              image={Khawar}
+              github="https://github.com/khawarahemad"
+              linkedin="https://www.linkedin.com/in/khawarahemad/"
+            />
+            
+            
+          </div>
+          <h2 className="text-white text-3xl font-bold mt-24 mb-12 text-center animate-fadeIn">
+            Social Media Team
+          </h2>
+           <div className="flex flex-wrap justify-center gap-12">
+            <MemberCard
+              name="Abhisek Maharana"
+              role="Social Media Team Member"
+              image={Abhisek}
+              github="https://github.com/abhisekvirus"
+              linkedin="https://www.linkedin.com/in/abhisek-maharana-4ba802302"
+            />
+            </div>
+            <div className="flex mt-10 justify-center w-full block lg:hidden">
+  <button
+    className="inline-flex  lg:h-16 sm:h-10 animate-shimmer items-center justify-center rounded-md border border-purple-500/20  
+       bg-[linear-gradient(110deg,#000103,45%,#4c1d95,55%,#000103)] bg-[length:200%_100%] 
+       px-6 font-medium lg:text-xl sm:text-md text-purple-300 transition-colors 
+       hover:bg-[linear-gradient(110deg,#000103,45%,#6d28d9,55%,#000103)] 
+       hover:text-purple-200 hover:border-purple-500/40
+       focus:outline-none focus:ring-2 focus:ring-purple-500/50 
+       focus:ring-offset-2 focus:ring-offset-black"
+    onClick={() => router.push("/team/leads")} 
+  >
+    View Leads &amp; Co-Leads
+  </button>
+</div>
         </div>
       </div>
-
-      {/* Team Members */}
-      <div className="mt-16 mb-10">
-        <h2 className="text-white text-3xl font-bold mb-8 text-center">
-          Team Members
-        </h2>
-        <div className="flex flex-wrap justify-center gap-8">
-          <MemberCard
-            name="Asutosh Parida"
-            role="Team Member"
-            image={Asutosh}
-            github="https://github.com/asutoshparida8658"
-            linkedin="https://www.linkedin.com/in/asutosh-parida-b3b686250"
-          />
-          <MemberCard
-            name="Disha Mishra"
-            role="Team Member"
-            image={Disha}
-            github="https://github.com/dishaamishraa"
-            linkedin="https://www.linkedin.com/in/disha-mishra-699245279/"
-          />
-          <MemberCard
-            name="Mir Sadab Ali"
-            role="Team Member"
-            image={Mir}
-            github="https://github.com/SadabAli"
-            linkedin="https://www.linkedin.com/in/mir-sadab-ali-b29157268/"
-          />
-          <MemberCard
-            name="Priyanshu Kumar"
-            role="Team Member"
-            image={Priyanshu}
-            github="https://github.com/Priyanshu270603"
-            linkedin="https://www.linkedin.com/in/priyanshu-kumar-305902303"
-          />
-          <MemberCard
-            name="Bhawani Sankar Das"
-            role="Team Member"
-            image={Bhawani}
-            github="https://github.com/BhawaniDas"
-            linkedin="https://www.linkedin.com/in/bhawani-sankar-das-023889336/"
-          />
-          <MemberCard
-            name="Aryan Ashima Swain"
-            role="Team Member"
-            image={Aryan}
-            github="https://github.com/SARYAN23"
-            linkedin="https://www.linkedin.com/in/aryan-ashima-swain-8727b4300/"
-          />
-          <MemberCard
-            name="Khawar Ahmed Khan"
-            role="Team Member"
-            image={Khawar}
-            github="https://github.com/khawarahemad"
-            linkedin="https://www.linkedin.com/in/khawarahemad/"
-          />
-        </div>
+                     
+      {/* Animated Background */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute w-[800px] h-[800px] bg-purple-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20 animate-blob"></div>
+        <div className="absolute w-[600px] h-[600px] bg-indigo-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20 animate-blob animation-delay-2000"></div>
+        <div className="absolute w-[700px] h-[700px] bg-pink-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20 animate-blob animation-delay-4000"></div>
       </div>
+
+      
     </div>
-  );
+  )
 }
+

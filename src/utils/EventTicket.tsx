@@ -31,8 +31,8 @@ const EventTicket: React.FC<EventTicketProps> = ({name, date, location, ticketId
             className="text-white"
           >
             <div className="flex items-center -ml-4 sm:space-x-[15px] lg:space-x-[100px] text-4xl font-extrabold mb-5 tracking-tight">
-               <Image src="/zenotrone.png" width={200} height={50} alt="Zenotrone Logo" />
-               <Image src="/logo.png" width={100} height={50} alt="Zenotrone Logo" />
+               <Image src="https://res.cloudinary.com/db0x5vhbk/image/upload/v1738404422/kzcvx5u7yl4tdbcs9ajm.png" width={200} height={50} alt="Zenotrone Logo" />
+               <Image src="https://res.cloudinary.com/db0x5vhbk/image/upload/v1738515816/ptstyvnggxzyb9xatpfv.png" width={100} height={50} alt="Zenotrone Logo" />
            </div>
 
     
@@ -74,7 +74,7 @@ const EventTicket: React.FC<EventTicketProps> = ({name, date, location, ticketId
         {/* Decorative Elements */}
         <div className="absolute top-0 right-0 w-40 h-40 bg-white bg-opacity-10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
         <div className="absolute bottom-0 left-0 w-60 h-60 bg-white bg-opacity-10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
-        <Image src="/text1.png" width={1000} height={50} alt="textile Logo" />
+        <Image src="https://res.cloudinary.com/db0x5vhbk/image/upload/v1738516094/uiszlmu5jm2ijupnqyav.png" width={1000} height={50} alt="textile Logo" />
       </div>
     </motion.div>
   )

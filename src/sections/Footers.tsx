@@ -4,9 +4,10 @@ import { Github, Instagram, Linkedin, X, Hash, Send } from "lucide-react";
 
 export const Footers = () => {
   return (
-    <footer className="bg-black py-8 border-t border-gray-700">
+    <footer className="relative z-20 bg-black backdrop-blur-none py-8 border-t border-gray-700">
       <div className="container mx-auto px-4">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+          {/* Logo + Branding */}
           <div className="flex items-center gap-3">
             <Image
               src={Logo}
@@ -20,10 +21,10 @@ export const Footers = () => {
             </div>
           </div>
 
+          {/* Social Media Icons */}
           <div className="flex items-center gap-4">
             <a
-              href="https://github.com/DevSomware  
-"
+              href="https://github.com/DevSomware"
               target="_blank"
               rel="noopener noreferrer"
               className="text-white hover:text-purple-500"
@@ -72,6 +73,7 @@ export const Footers = () => {
             </a>
           </div>
 
+          {/* Copyright Text */}
           <div className="text-gray-400 text-xs sm:text-sm md:text-base text-center md:text-right">
             © {new Date().getFullYear()} DevSomeware. All rights reserved.
           </div>

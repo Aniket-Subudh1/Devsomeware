@@ -224,7 +224,7 @@ export default function TimelineDemo() {
                    bg-clip-text bg-[linear-gradient(45deg,#8b5cf6,#ec4899)] 
                    font-bold max-w-4xl cyber-font text-center mx-auto"
       >
-        DEV_SOMEWARE::ZENOTRONE_2025
+        DEVSOMEWARE::ZENOTRONE_2025
       </motion.h2>
 
       <motion.div
