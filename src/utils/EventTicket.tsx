@@ -31,9 +31,9 @@ const EventTicket: React.FC<EventTicketProps> = ({name, date, location, ticketId
             className="text-white"
           >
             <div className="flex items-center -ml-4 sm:space-x-[15px] lg:space-x-[100px] text-4xl font-extrabold mb-5 tracking-tight">
-  <Image src="/zenotrone.png" width={200} height={50} alt="Zenotrone Logo" />
-  <Image src="/logo.png" width={100} height={50} alt="Zenotrone Logo" />
-</div>
+               <Image src="/zenotrone.png" width={200} height={50} alt="Zenotrone Logo" />
+               <Image src="/logo.png" width={100} height={50} alt="Zenotrone Logo" />
+           </div>
 
     
              <div className="flex items-center mb-2">

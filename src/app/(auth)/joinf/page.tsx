@@ -313,38 +313,38 @@ const Joiningform = () => {
                 <h4 className="text-lg font-semibold mb-3 text-purple-600">
                   Personal Information
                 </h4>
-                <p className="mb-2 break-words flex justify-center items-center">
-                  <CiUser className="h-4 w-4" />{" "}
-                  <strong className="mx-1">Name:</strong> {formData.name}
-                </p>
-                <p className="mb-2 break-words flex justify-center items-center">
-                  <MdOutlineEmail />
-                  <strong className="mx-1">Email:</strong> {formData.email}
-                </p>
-                <p className="mb-2 break-words flex justify-center items-center flex-col">
-                  <FaGithub className="h-4 w-4" />
-                  <strong>GitHub: </strong>
-                  <a
-                    href={formData.github}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 mx-1 text-center"
-                  >
-                    {formData.github}
-                  </a>
-                </p>
-                <p className="break-words flex justify-center items-center flex-col">
-                  <FaLinkedin />
-                  <strong>LinkedIn: </strong>
-                  <a
-                    href={formData.linkedin}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 text-center"
-                  >
-                    {formData.linkedin}
-                  </a>
-                </p>
+                <p className="mb-2 break-words flex justify-center items-center flex-col text-center">
+  <FaGithub className="h-4 w-4" />
+  <strong>GitHub: </strong>
+  <div className="w-full max-w-[250px] sm:max-w-[350px] break-words">
+    <a
+      href={formData.github}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-500"
+    >
+      {formData.github}
+    </a>
+  </div>
+</p>
+
+<p className="break-words flex justify-center items-center flex-col text-center">
+  <FaLinkedin />
+  <strong>LinkedIn: </strong>
+  <div className="w-full max-w-[250px] sm:max-w-[350px] break-words">
+    <a
+      href={formData.linkedin}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-500"
+    >
+      {formData.linkedin}
+    </a>
+  </div>
+</p>
+
+
+
               </div>
 
               {/* Technical Background Box */}

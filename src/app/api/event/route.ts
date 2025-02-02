@@ -50,8 +50,8 @@ const handleSendMail = async (email:string) => {
             from: '"DevSomeware" <team@devsomeware.com>', // sender address
             to: email, // list of receivers,
             cc:"saneev.das@devsomeware.com,aniket@devsomeware.com,ankit@devsomeware.com,swagat@devsomeware.com,basir@devsomeware.com",
-            subject: "✅ Confirmation: Successfully Registered for Zenetrone!", 
-            text: "✅ Confirmation: Successfully Registered for Zenetrone!", // plain text body
+            subject: "✅ Confirmation: Successfully Registered for Zenotrone!", 
+            text: "✅ Confirmation: Successfully Registered for Zenotrone!", // plain text body
             html: `
             <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html dir="ltr" xmlns="http://www.w3.org/1999/xhtml" xmlns:o="urn:schemas-microsoft-com:office:office" lang="en">
