@@ -177,6 +177,7 @@ const ZenotroneCard = () => {
               height={100}
               alt="Event"
               className="rounded-lg shadow-lg object-cover w-full h-full"
+              loading="eager"
             />
           </div>
         </div>
