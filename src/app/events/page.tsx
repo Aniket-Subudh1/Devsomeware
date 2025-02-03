@@ -17,8 +17,6 @@ const ParticleBackground = () => {
     }>
   >([]);
 
-
-
   useEffect(() => {
     const newParticles = [...Array(20)].map(() => ({
       top: `${Math.random() * 100}%`,
@@ -125,7 +123,7 @@ const ZenotroneCard = () => {
 
         {/* Top Brand & Icons */}
         <div className="absolute top-4 left-4 text-lg font-bold">
-          <Image
+          <img
             src={"https://res.cloudinary.com/db0x5vhbk/image/upload/v1738404422/kzcvx5u7yl4tdbcs9ajm.png"}
             width={200}
             height={40}
@@ -135,7 +133,7 @@ const ZenotroneCard = () => {
         </div>
 
         <div className=" absolute flex mt-5 lg:ml-[1050px] ml-[350px]  sm:ml-[200px] md:ml-[1000px]">
-          <Image
+          <img
             src={"https://res.cloudinary.com/db0x5vhbk/image/upload/v1738515816/ptstyvnggxzyb9xatpfv.png"}
             width={100}
             height={20}
@@ -260,7 +258,7 @@ const ZenotroneCard = () => {
 
         {/* Bottom decorative shape */}
         <div className="absolute -bottom-[70px] md:bottom-0 lg:bottom-0 sm:h-[100px] h-[100px] lg:h-[90px] left-0 w-full">
-          <Image
+          <img
             src={"https://res.cloudinary.com/db0x5vhbk/image/upload/v1738516094/uiszlmu5jm2ijupnqyav.png"}
             width={1000}
             height={80}
