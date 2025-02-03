@@ -171,7 +171,7 @@ const ZenotroneCard = () => {
         <div className="relative flex flex-col md:flex-row items-center justify-between w-full md:h-full pt-12 px-4 md:px-6">
           {/* Event Photo Placeholder */}
           <div className="w-full border-rounded-xl mb-[40px] border-silver-500 mt-5 md:w-3/4 lg:h-[350px] sm:h-[250px] flex justify-center mb-4 md:mb-24">
-            <Image
+            <img
               src={"https://res.cloudinary.com/db0x5vhbk/image/upload/v1738404487/fbf1lb6dgxjeg9v9jg3j.png"}
               width={1000}
               height={100}
