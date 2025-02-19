@@ -129,7 +129,7 @@ export default function HackathonTeams() {
 
       {/* Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="bg-gradient-to-br from-purple-900 to-black border-purple-500">
+        <DialogContent className="bg-gradient-to-br from-black to-purple-900 border-purple-500">
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl md:text-2xl font-bold text-center text-white">
               {selectedTeam?.teamname} Details
