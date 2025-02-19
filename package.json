@@ -28,6 +28,8 @@
     "clsx": "^2.1.1",
     "cobe": "^0.6.3",
     "crypto-js": "^4.2.0",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
     "framer-motion": "^12.0.6",
     "gsap": "^3.12.7",
     "jsonwebtoken": "^9.0.2",
