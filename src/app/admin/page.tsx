@@ -21,7 +21,7 @@ fetchalldata();
       {!isLoggedIn ? (
         <LoginForm onLogin={setIsLoggedIn} />
       ) : (
-        <div className="w-full max-w-4xl">
+        <div className=" lg:max-w-6xl md:max-w-6xl w-full">
           <h1 className="text-2xl font-bold mb-4">Data Table</h1>
           <DataTable data={data} />
         </div>
