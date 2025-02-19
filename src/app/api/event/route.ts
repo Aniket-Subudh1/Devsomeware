@@ -4,6 +4,7 @@ import EventReg from "@/models/EventReg";
 import VerifyUser from "@/server/VerifyUser";
 import nodemailer from "nodemailer";
 export const POST = async (req:NextRequest) => {
+  return NextResponse.json({message:"Event Registration Over",success:true});
     try{
     const data = await req.json();
     console.log(data);

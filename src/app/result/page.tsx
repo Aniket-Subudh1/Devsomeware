@@ -342,13 +342,14 @@ export default function HackathonTeams() {
           <TableHead className="text-purple-300 whitespace-nowrap px-2 sm:px-4">Actions</TableHead>
         </TableRow>
       </TableHeader>
-      <TableBody>
+      <TableBody className="divide-y divide-gray-900 ">
         {data.map((team, index) => (
           <motion.tr
             key={index}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: index * 0.1 }}
+            className="hover:bg-gray-800"
           >
             <TableCell className="font-medium whitespace-nowrap px-2 sm:px-4">{team.teamname}</TableCell>
             <TableCell className="whitespace-nowrap px-2 sm:px-4">{team.teamleader}</TableCell>
