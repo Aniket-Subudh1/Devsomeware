@@ -84,52 +84,54 @@ export default function HackathonTeams() {
         </motion.div>
 
         {/* Table Section */}
-        <div className="w-full overflow-x-auto rounded-lg">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="bg-black/50 backdrop-blur-lg shadow-lg min-w-[320px] relative"
+        {/* Table Section */}
+<div className="w-full flex justify-center items-center">
+  <motion.div
+    initial={{ scale: 0.9, opacity: 0 }}
+    animate={{ scale: 1, opacity: 1 }}
+    transition={{ duration: 0.5 }}
+    className="bg-black/50 backdrop-blur-lg shadow-lg min-w-[320px] w-full max-w-4xl relative rounded-lg"
+  >
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="text-purple-300 whitespace-nowrap px-2 sm:px-4">Team Name</TableHead>
+          <TableHead className="text-purple-300 whitespace-nowrap px-2 sm:px-4">Team Leader</TableHead>
+          <TableHead className="text-purple-300 whitespace-nowrap px-2 sm:px-4">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.map((team, index) => (
+          <motion.tr
+            key={index}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: index * 0.1 }}
           >
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-purple-300 whitespace-nowrap px-2 sm:px-4">Team Name</TableHead>
-                  <TableHead className="text-purple-300 whitespace-nowrap px-2 sm:px-4">Team Leader</TableHead>
-                  <TableHead className="text-purple-300 whitespace-nowrap px-2 sm:px-4">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.map((team, index) => (
-                  <motion.tr
-                    key={index}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: index * 0.1 }}
-                  >
-                    <TableCell className="font-medium whitespace-nowrap px-2 sm:px-4">{team.teamname}</TableCell>
-                    <TableCell className="whitespace-nowrap px-2 sm:px-4">{team.teamleader}</TableCell>
-                    <TableCell className="px-2 sm:px-4">
-                      <Button
-                        variant="outline"
-                        onClick={() => handleViewTeam(team)}
-                        className="bg-purple-600 hover:bg-purple-700 text-white whitespace-nowrap w-full sm:w-auto"
-                      >
-                        <Users className="mr-2 h-4 w-4" />
-                        View Team
-                      </Button>
-                    </TableCell>
-                  </motion.tr>
-                ))}
-              </TableBody>
-            </Table>
-          </motion.div>
-        </div>
+            <TableCell className="font-medium whitespace-nowrap px-2 sm:px-4">{team.teamname}</TableCell>
+            <TableCell className="whitespace-nowrap px-2 sm:px-4">{team.teamleader}</TableCell>
+            <TableCell className="px-2 sm:px-4">
+              <Button
+                variant="outline"
+                onClick={() => handleViewTeam(team)}
+                className="bg-purple-600 hover:bg-purple-700 text-white whitespace-nowrap w-full sm:w-auto"
+              >
+                <Users className="mr-2 h-4 w-4" />
+                View Team
+              </Button>
+            </TableCell>
+          </motion.tr>
+        ))}
+      </TableBody>
+    </Table>
+  </motion.div>
+</div>
+
       </div>
 
       {/* Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="bg-gradient-to-br from-black to-purple-900 border-purple-500">
+        <DialogContent className="bg-gradient-to-br from-black to-purple-900 border-purple-500 opacity-80">
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl md:text-2xl font-bold text-center text-white">
               {selectedTeam?.teamname} Details
