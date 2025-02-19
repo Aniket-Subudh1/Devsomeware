@@ -40,7 +40,7 @@ export default function HackathonTeams() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-2 sm:p-4 md:p-8 relative overflow-hidden lg:mt-6">
+    <div className="min-h-screen bg-black text-white p-2 sm:p-4 md:p-8 relative overflow-hidden lg:mt-6">
       {/* Background Pattern Layer */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute inset-0" 
