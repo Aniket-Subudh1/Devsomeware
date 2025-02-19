@@ -13,21 +13,263 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Users } from "lucide-react"
 
 const data = [
-  {
-    teamname: "Code Crushers",
-    teamleader: "Alice Johnson",
-    teamdetails: ["Bob Smith", "Charlie Brown", "Diana Prince", "Ethan Hunt"],
-  },
-  {
-    teamname: "Byte Busters",
-    teamleader: "Frank Castle",
-    teamdetails: ["Grace Hopper", "Hank Pym", "Iris West", "Jack Ryan"],
-  },
-  {
-    teamname: "Tech Titans",
-    teamleader: "Lara Croft",
-    teamdetails: ["Max Payne", "Nora Allen", "Oscar Isaac", "Peter Parker"],
-  },
+    {
+        "teamname": "311_Team",
+        "teamleader": "Sibasish Padhihari",
+        "teamdetails": [
+            "Sibasish Padhihari",
+            "Subham mishra",
+            "Sawan Kumar patro",
+            "B P ARYAAN",
+            "Anshuman Panda"
+        ]
+    },
+    {
+        "teamname": "AI Architects",
+        "teamleader": "Swapnajit Mohanty",
+        "teamdetails": [
+            "Swapnajit Mohanty",
+            "Sudip Bisui",
+            "Smruti Sambhava Mishra",
+            "DAYAL SANKAR GHOSH"
+        ]
+    },
+    {
+        "teamname": "AceDevs",
+        "teamleader": "Devesh Das",
+        "teamdetails": [
+            "Devesh Das",
+            "Arbaz Arshad",
+            "Shreya Somi",
+            "Sounic Behera"
+        ]
+    },
+    {
+        "teamname": "BLUE",
+        "teamleader": "DEBASHISH MAHANTA",
+        "teamdetails": [
+            "DEBASHISH MAHANTA",
+            "Naman Parashar",
+            "Sipun Dandpat",
+            "Prasenjit Mohanta"
+        ]
+    },
+    {
+        "teamname": "BreakingBytes",
+        "teamleader": "Pritam Das",
+        "teamdetails": [
+            "Pritam Das",
+            "Amlan Pulak Pani",
+            "Bishnuprasad Sahoo"
+        ]
+    },
+    {
+        "teamname": "Byte navigators",
+        "teamleader": "Himansu Agrawal",
+        "teamdetails": [
+            "Himansu Agrawal",
+            "Subhalaxmi Nayak",
+            "Yash Aaryan",
+            "Tejaswini pradhan",
+            "Anwesh Meher"
+        ]
+    },
+    {
+        "teamname": "CLONING_CLOWN",
+        "teamleader": "SOUMEN SAGAR NAYAK",
+        "teamdetails": [
+            "SOUMEN SAGAR NAYAK",
+            "Arpita Priyadarsini",
+            "Satyajit Parida",
+            "Sourabh Kumar Mohanty",
+            "ABHIJIT DASH"
+        ]
+    },
+    {
+        "teamname": "Codeit!",
+        "teamleader": "Ayushman senapati",
+        "teamdetails": [
+            "Ayushman senapati",
+            "Apoorva Pattnaik",
+            "Neel kumar parmar",
+            "Lorence",
+            "Tapasya Das"
+        ]
+    },
+    {
+        "teamname": "D-SPARK",
+        "teamleader": "Preeti ranjan Pradhan",
+        "teamdetails": [
+            "Preeti ranjan Pradhan",
+            "Satyajyoti",
+            "Dhiraj Gupta",
+            "ATUL KUMAR RAJAK",
+            "Hemanand Swamy"
+        ]
+    },
+    {
+        "teamname": "DeepSynth",
+        "teamleader": "Dinabandhu Agrawal",
+        "teamdetails": [
+            "Dinabandhu Agrawal",
+            "Mrutyunjaya Swain",
+            "Chinmay Paikaray",
+            "ABHIJEET BEHERA",
+            "Swapneswar Sahoo"
+        ]
+    },
+    {
+        "teamname": "EduZen",
+        "teamleader": "Aurosmita Sahoo",
+        "teamdetails": [
+            "Aurosmita Sahoo",
+            "Swetalina Pradhan",
+            "Gouri Mahala",
+            "Rashmita Sahoo",
+            "Nibedita Swain"
+        ]
+    },
+    {
+        "teamname": "HACK HEROES",
+        "teamleader": "Ashutosh Mahakhud",
+        "teamdetails": [
+            "Ashutosh Mahakhud",
+            "Ritesh Gouda",
+            "Disha Agarwalla",
+            "Shakti Swarup",
+            "Bhargavi Konchada"
+        ]
+    },
+    {
+        "teamname": "MindMentor",
+        "teamleader": "Swapnajit Sahoo",
+        "teamdetails": [
+            "Swapnajit Sahoo",
+            "Annimesh Sasmal",
+            "Anjali Kasoudhan",
+            "Venzixx",
+            "Ankit Nanda"
+        ]
+    },
+    {
+        "teamname": "NO CODE BUDDIES",
+        "teamleader": "Manepalli Pavan Kumar",
+        "teamdetails": [
+            "Manepalli Pavan Kumar",
+            "Prithwijit Bose",
+            "Satya Brata",
+            "Lira Mohapatra"
+        ]
+    },
+    {
+        "teamname": "Rookies",
+        "teamleader": "Jnanaranjan Pati",
+        "teamdetails": [
+            "Jnanaranjan Pati",
+            "Saisubham Sahoo",
+            "RITIK RUPAM NANDA",
+            "Gayatri Choudhary",
+            "Prakash Parida"
+        ]
+    },
+    {
+        "teamname": "Syntax Squad",
+        "teamleader": "Bismaya Jyoti Dalei",
+        "teamdetails": [
+            "Bismaya Jyoti Dalei",
+            "Sumit Kumar Prusty",
+            "Anup Kumar Das"
+        ]
+    },
+    {
+        "teamname": "Team_Nexus",
+        "teamleader": "Paritosh Samal",
+        "teamdetails": [
+            "Paritosh Samal",
+            "Abhitosh Samal",
+            "Amansahoo Sahoo",
+            "Amiya Sahoo"
+        ]
+    },
+    {
+        "teamname": "TypeX",
+        "teamleader": "Sandeep Kumar Behera",
+        "teamdetails": [
+            "Sandeep Kumar Behera",
+            "Subhadarshan Sahoo",
+            "Jatin Behera",
+            "Girish Kumar Sahoo"
+        ]
+    },
+    {
+        "teamname": "ZeroDay Troopers",
+        "teamleader": "Aditya srichandan",
+        "teamdetails": [
+            "Aditya srichandan"
+        ]
+    },
+    {
+        "teamname": "abhilipsz8ao_Team",
+        "teamleader": "Abhilipsa pati",
+        "teamdetails": [
+            "Abhilipsa pati",
+            "Millan Kumar",
+            "Barsha Rani Behera",
+            "Roshan Patra",
+            "Sonali Sahu"
+        ]
+    },
+    {
+        "teamname": "debasispuruaxq_Team",
+        "teamleader": "Debasis Purohit",
+        "teamdetails": [
+            "Debasis Purohit",
+            "Debasish Padhi",
+            "Shrejal Mohanty",
+            "Subhankar Behera"
+        ]
+    },
+    {
+        "teamname": "kdeepatrzv6v_Team",
+        "teamleader": "Kruti Deepa Tripathy",
+        "teamdetails": [
+            "Kruti Deepa Tripathy",
+            "suchismita rautaray",
+            "Subhasmita Sahoo"
+        ]
+    },
+    {
+        "teamname": "parthomau32h_Team",
+        "teamleader": "Partho Mahanty",
+        "teamdetails": [
+            "Partho Mahanty",
+            "Ayush Mohanty",
+            "Sashwat Ranjan",
+            "Afrin firdosh",
+            "AYUSH MISHRA"
+        ]
+    },
+    {
+        "teamname": "technical talking",
+        "teamleader": "Subhranshu Phari",
+        "teamdetails": [
+            "Subhranshu Phari",
+            "Debaraj Nayak",
+            "Surya prasad Dash",
+            "Amlan Anshuman Behera"
+        ]
+    },
+    {
+        "teamname": "user_2yvikgsz8j0_Team",
+        "teamleader": "BRAJAKISHORE BEHERA",
+        "teamdetails": [
+            "BRAJAKISHORE BEHERA",
+            "Manab Jyoti Giri",
+            "Saurya jit pradhan Saurya",
+            "Mamnur Rajak",
+            "Debasish Pradhan"
+        ]
+    }
 ]
 
 export default function HackathonTeams() {
