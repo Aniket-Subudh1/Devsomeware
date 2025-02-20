@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { QrScanner } from "@/utils/Admin/qr-scanner"
 import { UserDataModal } from "@/utils/Admin/user-data-modal"
-import { ArrowLeftIcon, QrCodeIcon, RefreshCwIcon } from "lucide-react"
+import { ArrowLeftIcon, QrCodeIcon } from "lucide-react";
 
 // Mock user data - in a real app, this would come from an API
 const mockUserData = {
@@ -20,7 +20,6 @@ const mockUserData = {
 export default function ScannerPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [userData, setUserData] = useState(mockUserData)
-  const [isScannerActive, setIsScannerActive] = useState(true)
   const [lastScannedCode, setLastScannedCode] = useState<string | null>(null)
 
   const handleScan = (data: string | null) => {
@@ -38,25 +37,12 @@ export default function ScannerPage() {
       })
       
       setIsModalOpen(true)
-      setIsScannerActive(false)
     }
   }
 
   const handleCloseModal = () => {
     setIsModalOpen(false)
-    // Reset scanner
-    setTimeout(() => {
-      setLastScannedCode(null);
-      setIsScannerActive(true);
-    }, 300);
-  }
-
-  const resetScanner = () => {
-    setLastScannedCode(null);
-    setIsScannerActive(false);
-    setTimeout(() => {
-      setIsScannerActive(true);
-    }, 300);
+    setLastScannedCode(null)
   }
 
   return (
@@ -80,22 +66,11 @@ export default function ScannerPage() {
               <p className="text-sm text-muted-foreground">Position the QR code within the frame to scan</p>
             </div>
             
-            {isScannerActive && <QrScanner onScan={handleScan} />}
+            <QrScanner onScan={handleScan} isActive={!isModalOpen} />
             
-            {!isScannerActive && (
-              <div className="flex flex-col items-center space-y-4 py-4">
-                <p className="text-sm text-center text-muted-foreground">
-                  {lastScannedCode ? 
-                    `Code scanned: ${lastScannedCode.substring(0, 12)}...` : 
-                    "Scanner paused"}
-                </p>
-                <button
-                  className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-md"
-                  onClick={resetScanner}
-                >
-                  <RefreshCwIcon className="h-4 w-4" />
-                  Resume Scanning
-                </button>
+            {lastScannedCode && (
+              <div className="mt-4 text-sm text-center text-muted-foreground">
+                Code scanned: {lastScannedCode.substring(0, 12)}...
               </div>
             )}
           </div>
