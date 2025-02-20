@@ -20,6 +20,18 @@ export function QrScanner({ onScan, isActive = true }: QrScannerProps) {
   const lastErrorRef = useRef<number>(0)
   const errorCountRef = useRef<number>(0)
 
+  // New function to explicitly request camera access
+  const requestCameraAccess = async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ video: true })
+      // Permission granted; initialize the scanner
+      initializeScanner()
+    } catch (err) {
+      console.error("Camera access denied", err)
+      setError("Camera permission denied. Please allow access in browser settings.")
+    }
+  }
+
   const initializeScanner = async () => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices()
@@ -29,7 +41,8 @@ export function QrScanner({ onScan, isActive = true }: QrScannerProps) {
       const backCamera = videoDevices.find((device) =>
         device.label.toLowerCase().includes("back") || device.label.toLowerCase().includes("rear")
       )
-      const defaultCamera = backCamera?.deviceId || (videoDevices.length > 0 ? videoDevices[0].deviceId : null)
+      const defaultCamera =
+        backCamera?.deviceId || (videoDevices.length > 0 ? videoDevices[0].deviceId : null)
       setSelectedCamera(defaultCamera)
 
       if (!defaultCamera) {
@@ -48,7 +61,7 @@ export function QrScanner({ onScan, isActive = true }: QrScannerProps) {
 
   useEffect(() => {
     if (isActive) {
-      initializeScanner()
+      requestCameraAccess()
     }
     return () => {
       stopScanning()
@@ -58,27 +71,24 @@ export function QrScanner({ onScan, isActive = true }: QrScannerProps) {
   // Reset error count periodically
   useEffect(() => {
     const interval = setInterval(() => {
-      errorCountRef.current = 0;
-    }, 5000); // Reset every 5 seconds
+      errorCountRef.current = 0
+    }, 5000) // Reset every 5 seconds
 
-    return () => clearInterval(interval);
-  }, []);
+    return () => clearInterval(interval)
+  }, [])
 
   const startScanning = async (deviceId: string) => {
     if (!videoRef.current) return
 
-    stopScanning() // Ensure any previous scanner instance is stopped
+    // Stop any previous scanner instance
+    stopScanning()
 
     try {
-      const hints = new Map();
-      hints.set(2, true); // Enable PURE_BARCODE mode
-      hints.set(3, true); // Enable TRY_HARDER mode
-      
-      codeReaderRef.current = new BrowserQRCodeReader(hints)
-      // Removed timeBetweenScansMillis as it does not exist on BrowserQRCodeReader
+      const hints = new Map()
+      hints.set(2, true) // Enable PURE_BARCODE mode
+      hints.set(3, true) // Enable TRY_HARDER mode
 
-      // Configure video constraints for better performance
-      
+      codeReaderRef.current = new BrowserQRCodeReader(hints)
 
       scannerControlsRef.current = await codeReaderRef.current.decodeFromVideoDevice(
         deviceId,
@@ -86,32 +96,32 @@ export function QrScanner({ onScan, isActive = true }: QrScannerProps) {
         (result, error) => {
           if (result) {
             console.log("QR Code detected:", result.getText())
-            errorCountRef.current = 0;
+            errorCountRef.current = 0
             onScan(result.getText())
           }
 
           if (error) {
-            const now = Date.now();
-            
+            const now = Date.now()
+
             // Only log errors if they're not too frequent
             if (now - lastErrorRef.current > 1000) {
-              errorCountRef.current++;
-              lastErrorRef.current = now;
+              errorCountRef.current++
+              lastErrorRef.current = now
 
-              // If we get too many errors in a short period, try reinitializing
+              // If we get too many errors in a short period, reinitialize the scanner
               if (errorCountRef.current > 10) {
-                console.log("Too many errors, reinitializing scanner...");
-                errorCountRef.current = 0;
-                stopScanning();
+                console.log("Too many errors, reinitializing scanner...")
+                errorCountRef.current = 0
+                stopScanning()
                 setTimeout(() => {
-                  initializeScanner();
-                }, 1000);
-                return;
+                  requestCameraAccess()
+                }, 1000)
+                return
               }
 
-              // Only log non-NotFound errors and don't flood the console
+              // Only log non-NotFound errors to avoid flooding the console
               if (error.name !== "NotFoundException") {
-                console.log("Scanning error:", error.name);
+                console.log("Scanning error:", error.name)
               }
             }
           }
@@ -144,17 +154,9 @@ export function QrScanner({ onScan, isActive = true }: QrScannerProps) {
   const switchCamera = async (deviceId: string) => {
     setSelectedCamera(deviceId)
     stopScanning()
-    // Add small delay before starting new camera
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Add a small delay before starting the new camera
+    await new Promise((resolve) => setTimeout(resolve, 300))
     startScanning(deviceId)
-  }
-
-  const handleRetry = async () => {
-    setError(null)
-    errorCountRef.current = 0
-    // Add small delay before retrying
-    await new Promise(resolve => setTimeout(resolve, 300));
-    initializeScanner()
   }
 
   if (!isActive) {
@@ -168,11 +170,11 @@ export function QrScanner({ onScan, isActive = true }: QrScannerProps) {
           <CameraOffIcon className="h-12 w-12 mx-auto mb-4 text-red-500" />
           <h3 className="text-lg font-medium mb-2">Camera Error</h3>
           <p className="text-sm text-muted-foreground mb-4">{error}</p>
-          <button 
+          <button
             className="px-4 py-2 bg-primary text-white rounded-md"
-            onClick={handleRetry}
+            onClick={requestCameraAccess}
           >
-            Try Again
+            Request Camera
           </button>
         </div>
       ) : (
@@ -194,7 +196,11 @@ export function QrScanner({ onScan, isActive = true }: QrScannerProps) {
                 {camerasList.map((camera, index) => (
                   <button
                     key={camera.deviceId}
-                    className={`p-2 rounded-full ${selectedCamera === camera.deviceId ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}
+                    className={`p-2 rounded-full ${
+                      selectedCamera === camera.deviceId
+                        ? "bg-primary text-white"
+                        : "bg-muted text-muted-foreground"
+                    }`}
                     onClick={() => switchCamera(camera.deviceId)}
                     title={camera.label || `Camera ${index + 1}`}
                   >
