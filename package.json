@@ -35,6 +35,7 @@
     "file-saver": "^2.0.5",
     "framer-motion": "^12.0.6",
     "gsap": "^3.12.7",
+    "html-to-image": "^1.11.13",
     "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.2",
     "kursor": "^0.1.6",

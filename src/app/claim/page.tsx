@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Loader } from 'lucide-react';
 import { Toaster,toast } from 'sonner';
 import ZenotroneEventDialog from '@/utils/TicketModal';
-import { set } from 'mongoose';
 const page = () => {
   const [render,setRender] = useState(true);
   const [loading,setLoading] = useState(false);
