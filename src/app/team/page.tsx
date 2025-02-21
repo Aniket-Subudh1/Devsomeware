@@ -18,6 +18,8 @@ import Smruti from "@/assets/smruti.jpeg";
 import Bhawani from "@/assets/bhawani.jpg";
 import Asutosh from "@/assets/asutosh.jpg";
 import Priyanshu from "@/assets/priyanshu.jpg";
+import Kamlesh from "@/assets/rbaba.jpg";
+import hp from "@/assets/hp.jpg";
 import { MentorCard, MemberCard } from "@/components/ui/card-components"
 import { useInView } from "react-intersection-observer";
 
@@ -205,6 +207,13 @@ export default function TeamPage() {
               github="https://github.com/khawarahemad"
               linkedin="https://www.linkedin.com/in/khawarahemad/"
             />
+            <MemberCard
+              name="Kamlesh Sahani"
+              role="Core Community Member"
+              image={Kamlesh}
+              github="https://github.com/Kamlesh2pvt"
+              linkedin="https://www.linkedin.com/in/kamlesh-sahani-a416b6238"
+            />
             
             
           </div>
@@ -218,6 +227,13 @@ export default function TeamPage() {
               image={Abhisek}
               github="https://github.com/abhisekvirus"
               linkedin="https://www.linkedin.com/in/abhisek-maharana-4ba802302"
+            />
+             <MemberCard
+              name="Charita Ranjan Pradhan"
+              role="Social Media Team Member"
+              image={hp}
+              github="https://github.com/abhisekvirus"
+              linkedin="https://in.linkedin.com/in/charita-ranjan-pradhan-b1703b2bb"
             />
             </div>
             <div className="flex mt-10 justify-center w-full block lg:hidden">
