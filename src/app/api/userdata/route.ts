@@ -31,7 +31,6 @@ export const GET = async () => {
       JSON.stringify({
         status: 200,
         data: eventdata,
-        length: eventdata.length
       }), 
       {
         status: 200,
@@ -48,7 +47,7 @@ export const GET = async () => {
       JSON.stringify({
         status: 500,
         message: "Something went wrong please try again after sometime",
-        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+        error: process.env.NODE_ENV === 'development' && err instanceof Error ? err.message : undefined
       }),
       {
         status: 500,
