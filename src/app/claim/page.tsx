@@ -1,79 +1,54 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 "use client"
-
-import type React from "react"
-
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { KeyIcon, ArrowLeftIcon, Loader2Icon } from "lucide-react"
-import Link from "next/link"
-
-export default function ClaimPage() {
-  const router = useRouter()
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
-
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 800))
-
-    if (password === process.env.NEXT_PUBLIC_PASSWORD) {
-      router.push("/claim/scanner")
-    } else {
-      setError("Invalid password. Please try again.")
-      setIsLoading(false)
-    }
+import React, { useState } from 'react'
+import { Scanner } from '@yudiel/react-qr-scanner';
+import { Button } from '@/components/ui/button';
+import { Loader } from 'lucide-react';
+import ZenotroneEventDialog from '@/utils/TicketModal';
+const page = () => {
+  const [render,setRender] = useState(true);
+  const [loading,setLoading] = useState(false);
+  const [result,setResult] = useState('');
+  const [renderModal,setRenderModal] = useState(false);
+  const refresh = ()=>{
+    setRender(false)
+    setTimeout(()=>{
+      setRender(true)
+    },1000);
   }
+  //handle scan
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleScan = (result: { rawValue: any; }[]) => {
+    console.log(result[0].rawValue);
+    setLoading(true);
+    setRender(false);
+    setRenderModal(true);
 
+  }
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-background via-background to-muted">
-      <div className="absolute inset-0 bg-grid-white/10" />
-      <div className="relative flex min-h-screen flex-col items-center justify-center p-4">
-        <div className="w-full max-w-md space-y-6">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeftIcon className="h-4 w-4" />
-            Back to Home
-          </Link>
-          <div className="rounded-2xl border bg-card/50 p-6 backdrop-blur-sm">
-            <div className="mb-6 flex flex-col items-center space-y-2 text-center">
-              <div className="rounded-full bg-primary/10 p-3">
-                <KeyIcon className="h-6 w-6 text-primary" />
-              </div>
-              <h1 className="text-2xl font-bold">Login to Claim Ticket</h1>
-              <p className="text-sm text-muted-foreground">Enter your password to access the ticket scanner</p>
-            </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="transition-shadow duration-300 focus:shadow-lg"
-                  disabled={isLoading}
-                />
-              </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <Loader2Icon className="mr-2 h-4 w-4 animate-spin" /> : "Login"}
-              </Button>
-            </form>
-          </div>
-        </div>
+    <div className='flex justify-center items-center  flex-col mb-10 lg:min-h-screen'>
+      <img src="/hack.png" alt="logo" className="lg:hidden block" />
+    <h1 className='text-3xl font-bold text-center'>QR Scanner</h1>
+ <div className='container h-96 w-96 lg:[300px] lg:h-[300px] '>
+      { render&& <Scanner onScan={(result) => handleScan(result)} />}
+      {!render&& <div className="flex justify-center items-center h-full w-full">
+      <div className="animate-spin">
+        <Loader size={64} />
       </div>
+    </div>}
+    {loading&& <div className="flex justify-center items-center h-full w-full">
+      <div className="animate-spin">
+        <Loader size={64} />
+      </div>
+    </div>}
     </div>
+    <div>
+<Button onClick={refresh}>Refresh Scanner</Button>
+    </div>
+    <ZenotroneEventDialog renderModal={renderModal} setRenderModal={setRenderModal} setRender={setRender}/>
+    </div>
+   
   )
 }
 
+export default page

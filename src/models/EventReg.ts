@@ -5,6 +5,7 @@ const EventSchema = new mongoose.Schema({
     eventname:{type:String,required:true},
     ticketid:{type:String,required:true},
     email:{type:String,required:true},
+    clm:{type:Boolean,required:false,default:false},
     iszentrone:{type:Boolean,required:false,default:false},
 },{timestamps:true});
 export default mongoose.models.EventReg || mongoose.model("EventReg",EventSchema);

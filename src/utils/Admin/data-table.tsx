@@ -2,23 +2,18 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import ExcelJS from "exceljs"
-import { saveAs } from "file-saver"
-import { Download, ChevronUp, ChevronDown } from "lucide-react"
+import {ChevronUp, ChevronDown } from "lucide-react"
+// Move ExcelJS import into the export function to avoid SSR issues
 
 interface DataTableProps {
   data: Array<{
     iszentrone: any
+    clm: any
     ticketid: any
     userid: any
-    name: string
     email: string
-    github: string
-    linkedin: string
-    ticketId: string
     ticketStatus: string
   }>
 }
@@ -32,21 +27,31 @@ export function DataTable({ data }: DataTableProps) {
     direction: "asc" | "desc"
   }>({ key: null, direction: "asc" })
 
+  // Dynamically import ExcelJS and file-saver only when needed
+ 
+
   useEffect(() => {
     let result = [...data]
 
     if (nameFilter) {
-      result = result.filter(item => item.userid.name.toLowerCase().includes(nameFilter.toLowerCase()))
+      result = result.filter(item => 
+        item.userid?.name?.toLowerCase().includes(nameFilter.toLowerCase())
+      )
     }
 
     if (ticketFilter) {
-      result = result.filter(item => item.ticketid.toLowerCase().includes(ticketFilter.toLowerCase()))
+      result = result.filter(item => 
+        item.ticketid?.toString().toLowerCase().includes(ticketFilter.toLowerCase())
+      )
     }
 
     if (sortConfig.key) {
       result.sort((a, b) => {
-        if (a[sortConfig.key!] < b[sortConfig.key!]) return sortConfig.direction === "asc" ? -1 : 1
-        if (a[sortConfig.key!] > b[sortConfig.key!]) return sortConfig.direction === "asc" ? 1 : -1
+        const aValue = a[sortConfig.key!]
+        const bValue = b[sortConfig.key!]
+        if (!aValue || !bValue) return 0
+        if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1
+        if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1
         return 0
       })
     }
@@ -61,36 +66,7 @@ export function DataTable({ data }: DataTableProps) {
     })
   }
 
-  const handleExport = async () => {
-    const workbook = new ExcelJS.Workbook()
-    const worksheet = workbook.addWorksheet("Data")
-
-    const headers = ["Name", "Email",  "Ticket ID", "Ticket Status"]
-    worksheet.addRow(headers)
-    worksheet.getRow(1).font = { bold: true }
-    worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } }
-
-    filteredData.forEach(item => {
-      worksheet.addRow([
-        item.userid.name,
-        item.email,
-        item.userid.github,
-        item.userid.linkedin,
-        item.ticketid,
-        item.iszentrone
-      ])
-    })
-
-    worksheet.columns.forEach(column => { column.width = 20 })
-
-    try {
-      const buffer = await workbook.xlsx.writeBuffer()
-      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
-      saveAs(blob, `exported_data_${new Date().toISOString().split('T')[0]}.xlsx`)
-    } catch (error) {
-      console.error("Export failed:", error)
-    }
-  }
+  
 
   const getSortIcon = (key: keyof DataTableProps["data"][0]) => {
     if (sortConfig.key !== key) return null
@@ -104,25 +80,30 @@ export function DataTable({ data }: DataTableProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-        <Button onClick={handleExport} className="w-full sm:w-auto flex items-center gap-2">
-          <Download className="w-4 h-4" />
-          Export to Excel
-        </Button>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Input placeholder="Search by name" value={nameFilter} onChange={e => setNameFilter(e.target.value)} className="w-full sm:w-[200px]" />
-          <Input placeholder="Search by ticket ID" value={ticketFilter} onChange={e => setTicketFilter(e.target.value)} className="w-full sm:w-[200px]" />
+          <Input 
+            placeholder="Search by name" 
+            value={nameFilter} 
+            onChange={e => setNameFilter(e.target.value)} 
+            className="w-full sm:w-[200px]" 
+          />
+          <Input 
+            placeholder="Search by ticket ID" 
+            value={ticketFilter} 
+            onChange={e => setTicketFilter(e.target.value)} 
+            className="w-full sm:w-[200px]" 
+          />
         </div>
       </div>
 
-      {/* Responsive table with horizontal scroll */}
       <div className="overflow-x-auto overflow-y-auto">
         <Table className="w-full min-w-[700px]">
           <TableHeader>
             <TableRow>
-              {["Name", "Email",  "Ticket ID", "Ticket Status"].map((header, index) => (
+              {["Name", "Email", "Ticket ID", "Ticket Status"].map((header, index) => (
                 <TableHead
                   key={index}
-                  className="cursor-pointer hover:bg-gray-50 text-left px-3 py-2 whitespace-nowrap"
+                  className="cursor-pointer hover:bg-gray-900 text-left px-3 py-2 whitespace-nowrap"
                   onClick={() => handleSort(header.toLowerCase().replace(" ", "") as keyof DataTableProps["data"][0])}
                 >
                   <div className="flex items-center">
@@ -136,10 +117,18 @@ export function DataTable({ data }: DataTableProps) {
           <TableBody>
             {filteredData.map((row, rowIndex) => (
               <TableRow key={rowIndex} className="hover:bg-gray-900">
-                <TableCell className="px-3 py-2 whitespace-nowrap">{row.userid.name}</TableCell>
-                <TableCell className="px-3 py-2 whitespace-nowrap">{row.email}</TableCell>
-                <TableCell className="px-3 py-2 whitespace-nowrap">{row.ticketid}</TableCell>
-                <TableCell className="px-3 py-2 whitespace-nowrap">{!row.iszentrone?"Not Claimed":"Claimed"}</TableCell>
+                <TableCell className="px-3 py-2 whitespace-nowrap">
+                  {row.userid?.name || '-'}
+                </TableCell>
+                <TableCell className="px-3 py-2 whitespace-nowrap">
+                  {row.email || '-'}
+                </TableCell>
+                <TableCell className="px-3 py-2 whitespace-nowrap">
+                  {row.ticketid || '-'}
+                </TableCell>
+                <TableCell className="px-3 py-2 whitespace-nowrap">
+                  {!row.clm ? "Not Claimed" : "Claimed"}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
