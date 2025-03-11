@@ -66,7 +66,7 @@ const TicketsPage = () => {
   return (
     <main>
       <Card />
-      <div className="min-h-screen bg-gradient-to-br from-black via-black to-purple-900 -mt-28 flex items-center justify-center px-4 py-16">
+      <div className="min-h-screen bg-gradient-to-br  from-black via-black to-purple-900 -mt-20 flex items-center justify-center px-4 py-16">
         {hasTicket ? (
           <div className="flex flex-col items-center w-full max-w-4xl">
             <EventTicket
