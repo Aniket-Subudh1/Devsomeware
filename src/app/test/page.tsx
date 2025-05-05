@@ -210,9 +210,6 @@ const TestPage = () => {
       // Fetch test status from API
       const response = await fetch("/api/test");
 
-      if (!response.ok) {
-        throw new Error(`Server responded with status: ${response.status}`);
-      }
 
       const data = await response.json();
 
@@ -224,23 +221,13 @@ const TestPage = () => {
           round2: false,
           round3: false,
         };
-
-        // Process each test item in the array
-        data.tests.forEach(
-          (test: { status: string | boolean; round: string }) => {
-            // Convert string 'true'/'false' to boolean value
-            const isActive = test.status === "true" || test.status === true;
-
-            // Update the appropriate round
-            if (test.round === "1") {
-              updatedStatus.round1 = true; // Always ensure round 1 is available
-            } else if (test.round === "2") {
-              updatedStatus.round2 = isActive;
-            } else if (test.round === "3") {
-              updatedStatus.round3 = isActive;
-            }
+       data.tests.map((item: { round: number; status: boolean; })=>{
+          if (item.round === 2) {
+            updatedStatus.round2 = item.status;
+          } else if (item.round === 3) {
+            updatedStatus.round3 = item.status;
           }
-        );
+       })
 
         // Update state with the processed status
         setTestStatus(updatedStatus);
