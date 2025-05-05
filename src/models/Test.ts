@@ -1,11 +1,11 @@
 import mongoose from "mongoose";
 const TestSchema = new mongoose.Schema({
     round: {
-        type: String,
+        type: Number,
         required: true
     },
     status: {
-        type: String,
+        type: Boolean,
         required: true
     },
 
