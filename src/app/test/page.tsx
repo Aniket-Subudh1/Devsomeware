@@ -15,52 +15,83 @@ const TestPage = () => {
   const [loading, setLoading] = useState(true);
   const [testStatus, setTestStatus] = useState({
     round1: true, // Always start with round 1 unlocked by default
-    round2: false,
-    round3: false,
+    round2: false, 
+    round3: false
   });
-  const [userData, setUserData] = useState<{
-    name: string;
-    email: string;
-    domain: string;
-    campus: string;
-  } | null>(null);
+  
+  const [userName, setUserName] = useState("User");
+  const [userEmail, setUserEmail] = useState("");
+  
+  // Selected campus and domain
+  const [selectedCampus, setSelectedCampus] = useState("");
+  const [selectedDomain, setSelectedDomain] = useState("");
+  
   const [testLinks, setTestLinks] = useState<TestLinks>({
-    round1:
-      "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-1",
-    round2:
-      "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-2",
-    round3: "",
+    round1: "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-1",
+    round2: "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-2",
+    round3: "", // Will be set based on domain selection
   });
-
+  
   const router = useRouter();
 
+  // Domain options based on campus
+  const domains = {
+    bbsr: [
+      "Data Analytics and Machine Learning + Generative AI",
+      "Cloud Technology + Full-Stack Development with MERN",
+      "Data Analytics and Machine Learning",
+      "Software Technology",
+      "Cybersecurity Domain Track",
+      "Gaming and Immersive Learning: AR/VR Domain Track",
+      "Blockchain Domain Track",
+      "Cloud Technology Domain Track",
+    ],
+    pkd: [
+      "Data Analytics and Machine Learning + Generative AI",
+      "Cloud Technology + Full-Stack Development with MERN",
+      "Data Analytics and Machine Learning",
+      "Software Technology",
+      "Cybersecurity Domain Track",
+      "Gaming and Immersive Learning: AR/VR Domain Track",
+      "Blockchain Domain Track",
+      "Cloud Technology Domain Track",
+    ],
+    vzm: [
+      "Artificial Intelligence & Machine Learning (AIML)",
+      "Data Analysis & Machine Learning (DAML)",
+      "Software Engineering (SE)",
+      "Computer Network (CN)",
+      "IoT Cyber Security Blockchain (CIC)",
+    ],
+  };
+
   // Define domain-specific test links
-  const domainLinks: { [key: string]: string } = {
-    "Data Analytics and Machine Learning + Generative AI":
+  const domainLinks: {[key: string]: string} = {
+    "Data Analytics and Machine Learning + Generative AI": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-da-ml-gen-ai",
-    "Cloud Technology + Full-Stack Development with MERN":
+    "Cloud Technology + Full-Stack Development with MERN": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-cloud-full-stack-mern",
-    "Data Analytics and Machine Learning":
+    "Data Analytics and Machine Learning": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-da-ml",
-    "Software Technology":
+    "Software Technology": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-software-tech",
-    "Cybersecurity Domain Track":
+    "Cybersecurity Domain Track": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-cyber-security",
-    "Gaming and Immersive Learning: AR/VR Domain Track":
+    "Gaming and Immersive Learning: AR/VR Domain Track": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-gaming-ar-vr",
-    "Blockchain Domain Track":
+    "Blockchain Domain Track": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-blockchain",
-    "Cloud Technology Domain Track":
+    "Cloud Technology Domain Track": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-cloud-tech",
-    "Artificial Intelligence & Machine Learning (AIML)":
+    "Artificial Intelligence & Machine Learning (AIML)": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-ai-ml",
-    "Data Analysis & Machine Learning (DAML)":
+    "Data Analysis & Machine Learning (DAML)": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-basket-v-da-ml",
-    "Software Engineering (SE)":
+    "Software Engineering (SE)": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-software-eng",
-    "Computer Network (CN)":
+    "Computer Network (CN)": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-cn",
-    "IoT Cyber Security Blockchain (CIC)":
+    "IoT Cyber Security Blockchain (CIC)": 
       "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-iot-cs-blockchain",
   };
 
@@ -68,25 +99,23 @@ const TestPage = () => {
   const extractUserInfoFromToken = (token: string) => {
     try {
       // Simple JWT parsing without validation
-      const parts = token.split(".");
+      const parts = token.split('.');
       if (parts.length !== 3) return null;
-
+      
       const base64Url = parts[1];
-      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
       const jsonPayload = decodeURIComponent(
         atob(base64)
-          .split("")
-          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-          .join("")
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
       );
-
+      
       const payload = JSON.parse(jsonPayload);
-
+      
       return {
         name: payload.name || "User",
-        email: payload.email || "Not available",
-        domain: payload.domain || "Not available",
-        campus: payload.campus || "Not available",
+        email: payload.email || "",
       };
     } catch (error) {
       console.error("Error extracting user info from token:", error);
@@ -97,7 +126,7 @@ const TestPage = () => {
   useEffect(() => {
     // Get the JWT token from localStorage
     const token = localStorage.getItem("testtoken");
-
+    
     if (!token) {
       toast.error("You need to register first");
       setTimeout(() => {
@@ -109,128 +138,69 @@ const TestPage = () => {
     // Extract basic user info from token if possible
     const tokenInfo = extractUserInfoFromToken(token);
     if (tokenInfo) {
-      setUserData(tokenInfo);
-
-      // Set default Round 3 link based on domain from token
-      if (tokenInfo.domain) {
-        const domainName = tokenInfo.domain;
-        // Check for partial matches if exact match isn't found
-        const matchedDomain = Object.keys(domainLinks).find(
-          (key) => domainName.includes(key) || key.includes(domainName)
-        );
-
-        if (matchedDomain) {
-          setTestLinks((prev) => ({
-            ...prev,
-            round3: domainLinks[matchedDomain],
-          }));
-        } else {
-          // Set default round3 link if no match is found
-          setTestLinks((prev) => ({
-            ...prev,
-            round3:
-              "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-da-ml",
-          }));
-        }
-      }
+      setUserName(tokenInfo.name);
+      setUserEmail(tokenInfo.email);
     }
 
-    // Fetch additional user data and test status
-    fetchUserData();
+    // Fetch test status
     fetchTestStatus();
+    
+    // Set loading to false after a short delay
+    setTimeout(() => {
+      setLoading(false);
+    }, 1000);
   }, []);
 
-  const fetchUserData = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem("testtoken");
-
-      if (!token) {
-        throw new Error("No token found");
-      }
-
-      const response = await fetch("/api/testuser", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      try {
-        // Try to parse JSON response regardless of content-type
-        const data = await response.json();
-
-        if (data.success && data.user) {
-          // Set user data from response
-          setUserData({
-            name: data.user.name || "Not available",
-            email: data.user.email || "Not available",
-            domain: data.user.domain || "Not available",
-            campus: data.user.campus || "Not available",
-          });
-
-          // Match domain with test link
-          if (data.user.domain) {
-            const domainName = data.user.domain;
-            // Check for partial matches if exact match isn't found
-            const matchedDomain = Object.keys(domainLinks).find(
-              (key) => domainName.includes(key) || key.includes(domainName)
-            );
-
-            if (matchedDomain) {
-              setTestLinks((prev) => ({
-                ...prev,
-                round3: domainLinks[matchedDomain],
-              }));
-            } else {
-              console.warn("No matching domain found for:", domainName);
-              // Set default round3 link if no match is found
-              setTestLinks((prev) => ({
-                ...prev,
-                round3:
-                  "https://practice.geeksforgeeks.org/contest/baseline-evaluation-coding-test-round-3-da-ml",
-              }));
-            }
-          }
-        } else if (data.message) {
-          console.warn("API returned message:", data.message);
-          // Don't redirect - already using token info as fallback
-        }
-      } catch (parseError) {
-        console.error("Error parsing JSON response:", parseError);
-        // Already using token info as fallback, no need to do anything
-      }
-    } catch (error) {
-      console.error("Error fetching user data:", error);
-      // Already using token info as fallback, no need to do anything
-    } finally {
-      setLoading(false);
+  // Handle domain selection change
+  const handleDomainChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const domain = e.target.value;
+    setSelectedDomain(domain);
+    
+    // Update Round 3 link based on selected domain
+    if (domain && domainLinks[domain]) {
+      setTestLinks(prev => ({
+        ...prev,
+        round3: domainLinks[domain]
+      }));
+    } else {
+      // Set default if no domain selected or no matching link
+      setTestLinks(prev => ({
+        ...prev,
+        round3: ""
+      }));
     }
+  };
+
+  // Handle campus selection change
+  const handleCampusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const campus = e.target.value;
+    setSelectedCampus(campus);
+    // Reset domain when campus changes
+    setSelectedDomain("");
   };
 
   const fetchTestStatus = async () => {
     try {
       // Fetch test status from API
       const response = await fetch("/api/test");
-
+      
       try {
         const data = await response.json();
-
+        
         if (data.tests && Array.isArray(data.tests)) {
           // Map the test status to our state
           const statusMap = {
             round1: true, // Always make Round 1 available
             round2: false,
-            round3: false,
+            round3: false
           };
-
+          
           data.tests.forEach((test: any) => {
             if (test.round === 1) statusMap.round1 = true; // Always make Round 1 available
             if (test.round === 2) statusMap.round2 = test.status;
             if (test.round === 3) statusMap.round3 = test.status;
           });
-
+          
           setTestStatus(statusMap);
         }
       } catch (parseError) {
@@ -244,28 +214,26 @@ const TestPage = () => {
   };
 
   const handleTestClick = (round: number, url: string) => {
+    // For Round 3, require domain selection
+    if (round === 3 && !selectedDomain) {
+      toast.error("Please select a campus and domain first");
+      return;
+    }
+    
     // Always allow round 1, other rounds based on previous completion
     if (
-      round === 1 ||
-      (round === 2 && testStatus.round1) ||
-      (round === 3 && testStatus.round2)
+      (round === 1) || 
+      (round === 2 && testStatus.round1) || 
+      (round === 3 && testStatus.round2 && selectedDomain)
     ) {
-      window.open(url, "_blank");
+      if (url) {
+        window.open(url, "_blank");
+      } else {
+        toast.error("Test link not available");
+      }
     } else {
-      toast.error(
-        `Round ${round} is locked. Complete the previous round first.`
-      );
+      toast.error(`Round ${round} is locked. Complete the previous round first.`);
     }
-  };
-
-  const getCampusName = (campusCode: string): string => {
-    const campusMap: { [key: string]: string } = {
-      bbsr: "Bhubaneswar",
-      pkd: "Paralakhemundi",
-      vzm: "Vizianagaram",
-    };
-
-    return campusMap[campusCode] || campusCode;
   };
 
   if (loading) {
@@ -279,8 +247,8 @@ const TestPage = () => {
   return (
     <div className="min-h-screen bg-black flex flex-col items-center py-12 px-4">
       <Toaster richColors />
-
-      <motion.h1
+      
+      <motion.h1 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -288,35 +256,20 @@ const TestPage = () => {
       >
         Baseline Evaluation Test
       </motion.h1>
-
+      
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.2 }}
         className="bg-gradient-to-r from-purple-900/30 to-black/50 p-6 rounded-lg border border-purple-500/30 max-w-md w-full mb-8"
       >
-        <h2 className="text-xl text-white font-semibold mb-4">
-          User Information
-        </h2>
+        <h2 className="text-xl text-white font-semibold mb-4">User Information</h2>
         <div className="space-y-2">
-          <p className="text-gray-300">
-            <span className="text-purple-300">Name:</span> {userData?.name}
-          </p>
-          <p className="text-gray-300">
-            <span className="text-purple-300">Email:</span> {userData?.email}
-          </p>
-          <p className="text-gray-300">
-            <span className="text-purple-300">Domain:</span> {userData?.domain}
-          </p>
-          <p className="text-gray-300">
-            <span className="text-purple-300">Campus:</span>{" "}
-            {userData?.campus
-              ? getCampusName(userData.campus)
-              : "Not available"}
-          </p>
+          <p className="text-gray-300"><span className="text-purple-300">Name:</span> {userName}</p>
+          <p className="text-gray-300"><span className="text-purple-300">Email:</span> {userEmail}</p>
         </div>
       </motion.div>
-
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
         {/* Round 1 Card */}
         <motion.div
@@ -333,12 +286,11 @@ const TestPage = () => {
               </span>
             </div>
           </div>
-
+          
           <p className="text-gray-300 mb-6 flex-grow">
-            Complete the foundational test to evaluate your programming basics.
-            This is the first step of your evaluation.
+            Complete the foundational test to evaluate your programming basics. This is the first step of your evaluation.
           </p>
-
+          
           <button
             onClick={() => handleTestClick(1, testLinks.round1)}
             className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-lg flex items-center justify-center hover:from-purple-700 hover:to-purple-900 transition"
@@ -347,7 +299,7 @@ const TestPage = () => {
             Begin Test
           </button>
         </motion.div>
-
+        
         {/* Round 2 Card */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
@@ -369,17 +321,16 @@ const TestPage = () => {
               )}
             </div>
           </div>
-
+          
           <p className="text-gray-300 mb-6 flex-grow">
-            Test your intermediate programming skills. This round will evaluate
-            your problem-solving abilities.
+            Test your intermediate programming skills. This round will evaluate your problem-solving abilities.
           </p>
-
+          
           <button
             onClick={() => handleTestClick(2, testLinks.round2)}
             className={`w-full py-3 px-4 rounded-lg flex items-center justify-center transition ${
-              testStatus.round2
-                ? "bg-gradient-to-r from-purple-600 to-purple-800 text-white hover:from-purple-700 hover:to-purple-900"
+              testStatus.round2 
+                ? "bg-gradient-to-r from-purple-600 to-purple-800 text-white hover:from-purple-700 hover:to-purple-900" 
                 : "bg-gray-700 text-gray-400 cursor-not-allowed"
             }`}
           >
@@ -396,7 +347,7 @@ const TestPage = () => {
             )}
           </button>
         </motion.div>
-
+        
         {/* Round 3 Card */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
@@ -418,35 +369,70 @@ const TestPage = () => {
               )}
             </div>
           </div>
-
-          <p className="text-gray-300 mb-6 flex-grow">
-            Domain-specific advanced test for {userData?.domain}. This is the
-            final evaluation to assess your specialized skills.
+          
+          <p className="text-gray-300 mb-4">
+            Domain-specific advanced test. This is the final evaluation to assess your specialized skills.
           </p>
-
-          <button
-            onClick={() => handleTestClick(3, testLinks.round3)}
-            className={`w-full py-3 px-4 rounded-lg flex items-center justify-center transition ${
-              testStatus.round3
-                ? "bg-gradient-to-r from-purple-600 to-purple-800 text-white hover:from-purple-700 hover:to-purple-900"
-                : "bg-gray-700 text-gray-400 cursor-not-allowed"
-            }`}
-          >
-            {testStatus.round3 ? (
-              <>
-                <ExternalLink className="w-5 h-5 mr-2" />
-                Begin Test
-              </>
-            ) : (
-              <>
-                <Lock className="w-5 h-5 mr-2" />
-                Locked
-              </>
-            )}
-          </button>
+          
+          {/* Campus Dropdown */}
+          <div className="mb-3">
+            <label className="block text-gray-300 text-sm mb-1">Select Campus</label>
+            <select 
+              value={selectedCampus}
+              onChange={handleCampusChange}
+              className="w-full bg-black/50 border border-purple-500/30 rounded-lg py-2 px-3 text-white text-sm"
+            >
+              <option value="">Select Campus</option>
+              <option value="bbsr">Bhubaneswar (BBSR)</option>
+              <option value="pkd">Paralakhemundi (PKD)</option>
+              <option value="vzm">Vizianagaram (VZM)</option>
+            </select>
+          </div>
+          
+          {/* Domain Dropdown - Only show if campus is selected */}
+          {selectedCampus && (
+            <div className="mb-4">
+              <label className="block text-gray-300 text-sm mb-1">Select Domain</label>
+              <select 
+                value={selectedDomain}
+                onChange={handleDomainChange}
+                className="w-full bg-black/50 border border-purple-500/30 rounded-lg py-2 px-3 text-white text-sm"
+              >
+                <option value="">Select Domain</option>
+                {selectedCampus && domains[selectedCampus as keyof typeof domains].map((domain, index) => (
+                  <option key={index} value={domain}>
+                    {domain}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          <div className="mt-auto">
+            <button
+              onClick={() => handleTestClick(3, testLinks.round3)}
+              className={`w-full py-3 px-4 rounded-lg flex items-center justify-center transition ${
+                testStatus.round3 && selectedDomain
+                  ? "bg-gradient-to-r from-purple-600 to-purple-800 text-white hover:from-purple-700 hover:to-purple-900" 
+                  : "bg-gray-700 text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              {testStatus.round3 ? (
+                <>
+                  <ExternalLink className="w-5 h-5 mr-2" />
+                  Begin Test
+                </>
+              ) : (
+                <>
+                  <Lock className="w-5 h-5 mr-2" />
+                  Locked
+                </>
+              )}
+            </button>
+          </div>
         </motion.div>
       </div>
-
+      
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -456,21 +442,12 @@ const TestPage = () => {
         <div className="flex items-start">
           <AlertCircle className="w-6 h-6 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-lg font-semibold text-white mb-2">
-              Important Instructions
-            </h3>
+            <h3 className="text-lg font-semibold text-white mb-2">Important Instructions</h3>
             <ul className="list-disc list-inside text-gray-300 space-y-2">
-              <li>
-                You must complete each round before proceeding to the next one.
-              </li>
-              <li>
-                Ensure you have a stable internet connection during the test.
-              </li>
+              <li>You must complete each round before proceeding to the next one.</li>
+              <li>Ensure you have a stable internet connection during the test.</li>
               <li>Once you start a test, complete it in a single session.</li>
-              <li>
-                Your Round 3 test is specifically for your chosen domain:{" "}
-                <span className="text-purple-300">{userData?.domain}</span>.
-              </li>
+              <li>For Round 3, select your campus and domain to access the specialized test.</li>
               <li>Each test has a specific time limit. Plan accordingly.</li>
             </ul>
           </div>
