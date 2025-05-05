@@ -1,382 +1,388 @@
 "use client";
-import React, { useState } from "react";
-import { motion } from "framer-motion";
-import { Toaster, toast } from "sonner";
-import {
-  Lock,
-  Unlock,
-  X,
-  RefreshCw,
-  ShieldAlert,
-  EyeOff,
-  Eye,
-} from "lucide-react";
+import { useState, useEffect } from "react";
+import { Lock, Check, AlertTriangle, RefreshCw } from "lucide-react";
+import { toast, Toaster } from "sonner";
 
-// Admin password for the page
-const ADMIN_CODE = "CUTM-BASELINE-2025"; // You can change this to your desired code
-
-interface Test {
+// Define types for our data
+interface RoundItem {
   _id: string;
-  round: number;
-  status: boolean;
+  round: string;
+  status: string;
   createdAt: string;
   updatedAt: string;
+  __v: number;
 }
 
-const AdminTestPage = () => {
-  const [authenticated, setAuthenticated] = useState(false);
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [tests, setTests] = useState<Test[]>([]);
-  const [adminPassword, setAdminPassword] = useState("");
+export default function AdminStatusToggle() {
+  const [data, setData] = useState<RoundItem[]>([]);
+  const [showModal, setShowModal] = useState<boolean>(false);
+  const [password, setPassword] = useState<string>("");
+  const [currentItem, setCurrentItem] = useState<RoundItem | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
+  const [successMessage, setSuccessMessage] = useState<string>("");
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // Authenticate with the secure code
-  const handleAuthentication = () => {
-    if (password === ADMIN_CODE) {
-      setAuthenticated(true);
-      toast.success("Authentication successful");
-      fetchTests();
-    } else {
-      toast.error("Invalid authentication code");
-    }
-  };
-
-  // Fetch tests data from the API
-  const fetchTests = async () => {
-    try {
-      setRefreshing(true);
-      const response = await fetch("/api/test");
-      const data = await response.json();
-
-      if (data.tests) {
-        // Sort tests by round number
-        const sortedTests = [...data.tests].sort((a, b) => a.round - b.round);
-        setTests(sortedTests);
-      }
-    } catch (error) {
-      console.error("Error fetching tests:", error);
-      toast.error("Failed to load test data");
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  // Toggle the status of a test round (lock/unlock)
-  const toggleTestStatus = async (testId: string, currentStatus: boolean) => {
+  // FIX: Improved updateStatus function with better error handling
+  const updateStatus = async (id: string, newStatus: string) => {
     try {
       setLoading(true);
-      const response = await fetch("/api/test", {
+
+      const passwordToUse = process.env.NEXT_PUBLIC_TEST_PASSWORD || password;
+
+      const res = await fetch("/api/test", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          id: testId,
-          status: !currentStatus,
-          password: adminPassword,
+          id,
+          status: newStatus,
+          password: passwordToUse,
         }),
       });
 
-      const data = await response.json();
-
-      if (data.updatedTest) {
-        toast.success(
-          `Round ${data.updatedTest.round} ${
-            !currentStatus ? "unlocked" : "locked"
-          } successfully`
-        );
-        fetchTests();
-      } else {
-        toast.error(data.error || "Failed to update test status");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP error! Status: ${res.status}`);
       }
-    } catch (error) {
-      console.error("Error updating test status:", error);
-      toast.error("Failed to update test status");
+
+      const data = await res.json();
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to update status.");
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error("Error updating status:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Error updating status. Please try again later."
+      );
+      return { success: false };
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle adding a new test round
-  const addTestRound = async (round: number) => {
+  // FIX: Improved refresh data function with better error handling
+  const refreshData = async () => {
+    setIsRefreshing(true);
     try {
-      setLoading(true);
-      const response = await fetch("/api/test", {
-        method: "POST",
+      const res = await fetch("/api/test", {
+        method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          round,
-          status: false,
-          password: adminPassword,
-        }),
+        cache: "no-store", // Prevent caching
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        toast.success(`Round ${round} created successfully`);
-        fetchTests();
-      } else {
-        toast.error(data.error || "Failed to create test round");
+      if (!res.ok) {
+        throw new Error(`HTTP error! Status: ${res.status}`);
       }
-    } catch (error) {
-      console.error("Error creating test round:", error);
-      toast.error("Failed to create test round");
+
+      const result = await res.json();
+
+      if (result.success && Array.isArray(result.tests)) {
+        setData(result.tests);
+        toast.success("Data refreshed successfully!");
+      } else {
+        toast.error(
+          result.error || "Failed to refresh data. Please try again."
+        );
+      }
+    } catch (err) {
+      console.error("Error refreshing data:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Error refreshing data. Please try again later."
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Load data on component mount
+  useEffect(() => {
+    refreshData();
+  }, []);
+
+  const openPasswordModal = (item: RoundItem) => {
+    setCurrentItem(item);
+    setPassword("");
+    setError("");
+    setShowModal(true);
+  };
+
+  // FIX: Improved status change handler with better feedback
+  const handleStatusChange = async () => {
+    // Clear previous errors/messages
+    setError("");
+    setSuccessMessage("");
+
+    if (!currentItem) return;
+
+    // Check password
+    if (!password && !process.env.NEXT_PUBLIC_TEST_PASSWORD) {
+      setError("Password is required");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const newStatus = currentItem.status === "true" ? "false" : "true";
+
+      // Make API call to update status
+      const result = await updateStatus(currentItem._id, newStatus);
+
+      if (!result.success) {
+        setError("Failed to update status. Please try again.");
+        return;
+      }
+
+      // Success! Refresh data and show success message
+      await refreshData();
+
+      // Set success message
+      const statusText = newStatus === "true" ? "activated" : "deactivated";
+      setSuccessMessage(
+        `Round ${currentItem.round} has been successfully ${statusText}.`
+      );
+
+      // Close modal after a short delay
+      setTimeout(() => {
+        setShowModal(false);
+      }, 1000);
+    } catch (err) {
+      console.error("Error handling status change:", err);
+      setError("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Format date for display
-  const formatDate = (dateString: string) => {
+  // Handle escape key to close modal
+  useEffect(() => {
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && showModal) {
+        setShowModal(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleEscapeKey);
+    return () => {
+      document.removeEventListener("keydown", handleEscapeKey);
+    };
+  }, [showModal]);
+
+  // Format date for readability
+  const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
     return date.toLocaleString();
   };
 
-  // Card for each test round
-  const TestCard = ({ test }: { test: Test }) => {
-    return (
-      <div className="bg-gradient-to-br from-purple-900/20 to-black border border-purple-500/30 rounded-xl p-6 backdrop-blur-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-2xl font-bold text-white">Round {test.round}</h3>
-          <div
-            className={`px-3 py-1 rounded-full ${
-              test.status ? "bg-green-500/20" : "bg-red-500/20"
-            }`}
-          >
-            {test.status ? (
-              <span className="flex items-center text-green-400 text-sm">
-                <Unlock className="w-4 h-4 mr-1" /> Unlocked
-              </span>
-            ) : (
-              <span className="flex items-center text-red-400 text-sm">
-                <Lock className="w-4 h-4 mr-1" /> Locked
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="text-gray-300 text-sm mb-4">
-          <div className="flex items-center">
-            <span className="text-purple-400 mr-2">Created:</span>
-            <span>{formatDate(test.createdAt)}</span>
-          </div>
-          <div className="flex items-center mt-1">
-            <span className="text-purple-400 mr-2">Updated:</span>
-            <span>{formatDate(test.updatedAt)}</span>
-          </div>
+  return (
+    <div className="p-8 max-w-6xl mx-auto bg-gray-900 min-h-screen mt-10 rounded">
+      <Toaster
+        position="top-center"
+        richColors={true}
+        closeButton={false}
+        expand={false}
+      />
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-200">
+            Admin Status Control Panel
+          </h1>
+          <p className="text-gray-400 mt-1">Manage round activation status</p>
         </div>
 
         <button
-          onClick={() => toggleTestStatus(test._id, test.status)}
-          disabled={loading}
-          className={`w-full py-2 px-4 rounded-lg flex items-center justify-center transition ${
-            test.status
-              ? "bg-red-600 hover:bg-red-700 text-white"
-              : "bg-green-600 hover:bg-green-700 text-white"
+          onClick={refreshData}
+          disabled={isRefreshing}
+          className={`flex items-center gap-2 px-4 py-2 bg-black border border-gray-300 rounded-lg shadow-sm transition-colors ${
+            isRefreshing ? "opacity-70 cursor-not-allowed" : "hover:bg-gray-800"
           }`}
         >
-          {loading ? (
-            <RefreshCw className="w-5 h-5 animate-spin" />
-          ) : test.status ? (
-            <>
-              <Lock className="w-5 h-5 mr-2" />
-              Lock Round
-            </>
-          ) : (
-            <>
-              <Unlock className="w-5 h-5 mr-2" />
-              Unlock Round
-            </>
-          )}
+          <RefreshCw
+            size={16}
+            className={`${isRefreshing ? "animate-spin" : ""}`}
+          />
+          <span>{isRefreshing ? "Refreshing..." : "Refresh Data"}</span>
         </button>
       </div>
-    );
-  };
 
-  // Auth screen when not authenticated
-  if (!authenticated) {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
-        <Toaster richColors position="top-center" />
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-          className="max-w-md w-full bg-gradient-to-br from-purple-900/20 to-black border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm"
-        >
-          <div className="flex justify-center mb-6">
-            <ShieldAlert className="w-16 h-16 text-purple-500" />
-          </div>
-
-          <h2 className="text-2xl font-bold text-white text-center mb-6">
-            Secure Admin Access
-          </h2>
-
-          <div className="space-y-4">
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter admin code"
-                className="w-full bg-black/50 border border-purple-500/50 rounded-lg py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
-              />
-              <button
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-              >
-                {showPassword ? (
-                  <EyeOff className="w-5 h-5" />
-                ) : (
-                  <Eye className="w-5 h-5" />
-                )}
-              </button>
-            </div>
-
-            <button
-              onClick={handleAuthentication}
-              className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-lg flex items-center justify-center hover:from-purple-700 hover:to-purple-900 transition"
-            >
-              Authenticate
-            </button>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-black flex flex-col items-center py-12 px-4">
-      <Toaster richColors />
-
-      <motion.h1
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="text-4xl md:text-5xl font-bold bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent mb-8"
-      >
-        Test Management Dashboard
-      </motion.h1>
-
-      {/* API Password Input */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
-        className="w-full max-w-3xl bg-gradient-to-br from-purple-900/20 to-black border border-purple-500/30 rounded-xl p-6 backdrop-blur-sm mb-8"
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-white">API Authentication</h2>
-          <button
-            onClick={fetchTests}
-            disabled={refreshing}
-            className="flex items-center text-purple-400 hover:text-purple-300 transition"
-          >
-            <RefreshCw
-              className={`w-5 h-5 mr-1 ${refreshing ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </button>
+      {successMessage && (
+        <div className="mb-4 bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-md flex items-center animate-fade-in">
+          <Check size={20} className="mr-2" />
+          {successMessage}
         </div>
+      )}
 
-        <div className="relative mb-4">
-          <input
-            type={showPassword ? "text" : "password"}
-            value={adminPassword}
-            onChange={(e) => setAdminPassword(e.target.value)}
-            placeholder="Enter API password"
-            className="w-full bg-black/50 border border-purple-500/50 rounded-lg py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
-          />
-          <button
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-          >
-            {showPassword ? (
-              <EyeOff className="w-5 h-5" />
-            ) : (
-              <Eye className="w-5 h-5" />
-            )}
-          </button>
-        </div>
-
-        <p className="text-yellow-400 text-sm flex items-start">
-          <ShieldAlert className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
-          <span>
-            This password is required for API operations. You need to set it to
-            match your server&apos;s expected password.
-          </span>
-        </p>
-      </motion.div>
-
-      {/* Add New Round Controls */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.3 }}
-        className="w-full max-w-3xl bg-gradient-to-br from-purple-900/20 to-black border border-purple-500/30 rounded-xl p-6 backdrop-blur-sm mb-8"
-      >
-        <h2 className="text-xl font-bold text-white mb-4">
-          Add New Test Round
-        </h2>
-        <div className="flex gap-2">
-          {[1, 2, 3].map((round) => (
-            <button
-              key={round}
-              onClick={() => addTestRound(round)}
-              disabled={loading || tests.some((t) => t.round === round)}
-              className={`flex-1 py-2 px-4 rounded-lg flex items-center justify-center transition ${
-                tests.some((t) => t.round === round)
-                  ? "bg-gray-700 text-gray-400 cursor-not-allowed"
-                  : "bg-purple-600 hover:bg-purple-700 text-white"
-              }`}
-            >
-              Create Round {round}
-            </button>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Test Rounds Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
-        {tests.length > 0 ? (
-          tests.map((test) => (
-            <motion.div
-              key={test._id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5 }}
-            >
-              <TestCard test={test} />
-            </motion.div>
-          ))
-        ) : (
-          <div className="col-span-3 flex flex-col items-center justify-center p-12 border border-dashed border-gray-700 rounded-xl bg-black/30">
-            <X className="w-12 h-12 text-gray-600 mb-4" />
-            <p className="text-gray-400 text-center">
-              No test rounds found. Create them using the controls above.
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {data.length === 0 ? (
+          <div className="col-span-full flex items-center justify-center p-8 bg-gray-800 rounded-xl">
+            <p className="text-gray-400">
+              {isRefreshing
+                ? "Loading test data..."
+                : "No test data available. Try refreshing."}
             </p>
           </div>
+        ) : (
+          data.map((item) => (
+            <div
+              key={item._id}
+              className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-shadow duration-300"
+            >
+              <div className="p-4 border-b border-gray-100">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-gray-800">
+                    Round {item.round}
+                  </h2>
+                  <div
+                    className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors cursor-pointer ${
+                      item.status === "true" ? "bg-green-500" : "bg-gray-300"
+                    }`}
+                    onClick={() => openPasswordModal(item)}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${
+                        item.status === "true"
+                          ? "translate-x-6"
+                          : "translate-x-1"
+                      }`}
+                    />
+                  </div>
+                </div>
+                <p
+                  className={`text-sm font-medium mt-1 ${
+                    item.status === "true" ? "text-green-600" : "text-gray-500"
+                  }`}
+                >
+                  {item.status === "true" ? "Active" : "Inactive"}
+                </p>
+              </div>
+
+              <div className="p-4 bg-gray-50">
+                <div className="text-sm text-gray-600 space-y-1">
+                  <p className="flex items-center justify-between">
+                    <span className="font-medium">ID:</span>
+                    <span className="font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-700">
+                      {item._id.substring(0, 8)}...
+                    </span>
+                  </p>
+                  <p className="flex items-center justify-between">
+                    <span className="font-medium">Created:</span>
+                    <span>{formatDate(item.createdAt)}</span>
+                  </p>
+                  <p className="flex items-center justify-between">
+                    <span className="font-medium">Updated:</span>
+                    <span>{formatDate(item.updatedAt)}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))
         )}
       </div>
 
-      {/* Logout Button */}
-      <motion.button
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.5 }}
-        onClick={() => setAuthenticated(false)}
-        className="mt-10 py-2 px-6 border border-red-500/50 text-red-400 rounded-lg hover:bg-red-900/20 transition"
-      >
-        Logout
-      </motion.button>
+      {/* Password Confirmation Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fade-in">
+          <div
+            className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl border border-gray-200 animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center mb-4 pb-3 border-b border-gray-200">
+              <div className="bg-blue-100 p-2 rounded-full mr-3">
+                <Lock className="text-blue-600" size={20} />
+              </div>
+              <h2 className="text-xl font-bold text-gray-800">
+                Confirm Status Change
+              </h2>
+            </div>
+
+            <p className="mb-5 text-gray-600">
+              You are about to change the status of{" "}
+              <span className="font-bold">Round {currentItem?.round}</span> from{" "}
+              <span
+                className={`font-semibold ${
+                  currentItem?.status === "true"
+                    ? "text-green-600"
+                    : "text-gray-500"
+                }`}
+              >
+                {currentItem?.status === "true" ? "Active" : "Inactive"}
+              </span>{" "}
+              to{" "}
+              <span
+                className={`font-semibold ${
+                  currentItem?.status === "true"
+                    ? "text-gray-500"
+                    : "text-green-600"
+                }`}
+              >
+                {currentItem?.status === "true" ? "Inactive" : "Active"}
+              </span>
+            </p>
+
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Enter Admin Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter password"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleStatusChange();
+                  }
+                }}
+              />
+              {error && (
+                <div className="flex items-center mt-2 text-red-600">
+                  <AlertTriangle size={16} className="mr-1" />
+                  <p className="text-sm">{error}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleStatusChange}
+                disabled={loading}
+                className={`px-4 py-2 text-white rounded-lg flex items-center justify-center min-w-24 ${
+                  loading
+                    ? "bg-blue-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700 transition-colors"
+                }`}
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw size={16} className="mr-2 animate-spin" />
+                    <span>Processing</span>
+                  </>
+                ) : (
+                  "Confirm"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-};
-
-export default AdminTestPage;
+}
