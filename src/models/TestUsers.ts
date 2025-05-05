@@ -33,5 +33,5 @@ const TestUserSchema = new mongoose.Schema({
     
 
 },{timestamps:true});
-export default mongoose.models.TestUsers || mongoose.model("TestUserSchema",TestUserSchema);
+export default mongoose.models.TestUsers || mongoose.model("TestUsers",TestUserSchema);
 

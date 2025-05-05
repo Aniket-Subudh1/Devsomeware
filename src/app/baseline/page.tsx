@@ -134,24 +134,26 @@ const BaselineTestForm = () => {
     }
 
     setLoading(true);
-
-    // Simulate API call
-    try {
-      // In a real implementation, you would make an API call here
-      // const response = await fetch("/api/placement-registration", {
-      //   method: "POST",
-      //   headers: {
-      //     "Content-Type": "application/json",
-      //   },
-      //   body: JSON.stringify(formData),
-      // });
-      // const data = await response.json();
-
-      // Simulate successful submission
-      setTimeout(() => {
-        setLoading(false);
+    try{
+     const response = await fetch("/api/testusers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          regno: formData.registrationNo,
+          phone: formData.phoneNumber,
+          branch: formData.branch,
+          domain: formData.domainName,
+          campus: formData.campus,
+        }),
+      });
+      const data = await response.json();
+      setLoading(false);
+      if (data.success) {
         toast.success("Form submitted successfully!");
-
         setFormData({
           name: "",
           registrationNo: "",
@@ -161,16 +163,17 @@ const BaselineTestForm = () => {
           branch: "",
           campus: "",
         });
-
-        setTimeout(() => {
-          console.log("Form submitted:", formData);
-        }, 2000);
-      }, 1500);
-    } catch (error) {
-      setLoading(false);
-      toast.error("An error occurred. Please try again.");
-      console.error("Error submitting form:", error);
+        localStorage.setItem("testtoken", data.token);
+        router.push("/test");
+      } else {
+        toast.error(data.message || "Error in submitting the form");
+      }
     }
+    catch(err){
+      console.log("error in the baseline test form",err);
+      toast.error("Error in submitting the form. Please try again later.");
+    }
+    
   };
 
   return (
