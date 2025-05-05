@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, ReactNode } from "react";
+import React, { useState, ReactNode, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,11 @@ const BaselineTestForm = () => {
     branch: "",
     campus: "",
   });
-
+useEffect(()=>{
+if(localStorage.getItem("testtoken")){
+  router.push("/test");
+}
+},[])
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   // Domain options based on campus

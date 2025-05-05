@@ -27,7 +27,7 @@ export const GET = async () => {
     try {
         await ConnectDb();
         const tests = await Test.find({});
-        return NextResponse.json({ tests }, { status: 200 });
+        return NextResponse.json({ tests ,message: "Tests fetched successfully",success:true });
     } catch (error) {
         console.error("Error fetching tests:", error);
         return NextResponse.json({ error: "Failed to fetch tests" }, { status: 500 });
@@ -41,12 +41,12 @@ export const PUT = async (req:NextRequest) => {
         if(password !== process.env.TEST_PASSWORD){
             return NextResponse.json({ error: "Invalid password" }, { status: 401 });
         }
-        const updatedTest = await Test.findByIdAndUpdate(
+        await Test.findByIdAndUpdate(
             id,
             { status },
             { new: true }
         );
-        return NextResponse.json({ message: "Test updated successfully", updatedTest }, { status: 200 });
+        return NextResponse.json({ message: "Test updated successfully", success:true });
     } catch (error) {
         console.error("Error updating test:", error);
         return NextResponse.json({ error: "Failed to update test" }, { status: 500 });
