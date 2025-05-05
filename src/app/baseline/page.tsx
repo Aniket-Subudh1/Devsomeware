@@ -11,7 +11,7 @@ const BaselineTestForm = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [campus, setCampus] = useState("");
-
+  console.log("campus", campus);
   const [formData, setFormData] = useState({
     name: "",
     registrationNo: "",
