@@ -210,24 +210,23 @@ const TestPage = () => {
       // Fetch test status from API
       const response = await fetch("/api/test");
 
-
       const data = await response.json();
 
       // Check if data.tests exists and is an array
       if (data.tests && Array.isArray(data.tests)) {
         // Initialize default status object
         const updatedStatus = {
-          round1: true, // Always make sure Round 1 is available by default
+          round1: false, // Always make sure Round 1 is available by default
           round2: false,
           round3: false,
         };
-       data.tests.map((item: { round: number; status: boolean; })=>{
+        data.tests.map((item: { round: number; status: boolean }) => {
           if (item.round === 2) {
             updatedStatus.round2 = item.status;
           } else if (item.round === 3) {
             updatedStatus.round3 = item.status;
           }
-       })
+        });
 
         // Update state with the processed status
         setTestStatus(updatedStatus);
@@ -352,9 +351,15 @@ const TestPage = () => {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-2xl font-bold text-white">Round 1</h3>
             <div className="flex items-center px-3 py-1 rounded-full bg-opacity-20 backdrop-blur-sm">
-              <span className="flex items-center text-green-400 text-sm">
-                <Unlock className="w-4 h-4 mr-1" /> Unlocked
-              </span>
+              {testStatus.round1 ? (
+                <span className="flex items-center text-green-400 text-sm">
+                  <Unlock className="w-4 h-4 mr-1" /> Unlocked
+                </span>
+              ) : (
+                <span className="flex items-center text-red-400 text-sm">
+                  <Lock className="w-4 h-4 mr-1" /> Locked
+                </span>
+              )}
             </div>
           </div>
 
@@ -366,10 +371,23 @@ const TestPage = () => {
           <button
             onClick={() => handleTestClick(1, testLinks.round1)}
             disabled={!testStatus.round1}
-            className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-lg flex items-center justify-center hover:from-purple-700 hover:to-purple-900 transition"
+            className={`w-full py-3 px-4 rounded-lg flex items-center justify-center transition ${
+              testStatus.round1
+                ? "bg-gradient-to-r from-purple-600 to-purple-800 text-white hover:from-purple-700 hover:to-purple-900"
+                : "bg-gray-700 text-gray-400 cursor-not-allowed"
+            }`}
           >
-            <ExternalLink className="w-5 h-5 mr-2" />
-            Begin Test
+            {testStatus.round1 ? (
+              <>
+                <ExternalLink className="w-5 h-5 mr-2" />
+                Begin Test
+              </>
+            ) : (
+              <>
+                <Lock className="w-5 h-5 mr-2" />
+                Locked
+              </>
+            )}
           </button>
         </motion.div>
 
