@@ -187,52 +187,61 @@ const TestPage = () => {
       try {
         const data = await response.json();
         
+        // Check if data.tests exists and is an array
         if (data.tests && Array.isArray(data.tests)) {
-          // Map the test status to our state
-          const statusMap = {
-            round1: true, // Always make Round 1 available
+          // Initialize default status object
+          const updatedStatus = {
+            round1: false,
             round2: false,
             round3: false
           };
           
-          data.tests.forEach((test: any) => {
-            if (test.round === 1) statusMap.round1 = true; // Always make Round 1 available
-            if (test.round === 2) statusMap.round2 = test.status;
-            if (test.round === 3) statusMap.round3 = test.status;
+          // Process each test item in the array
+          data.tests.forEach(test => {
+            // Convert string 'true'/'false' to boolean value
+            const isActive = test.status === "true" || test.status === true;
+            
+            // Update the appropriate round
+            if (test.round === "1") {
+              updatedStatus.round1 = isActive;
+            } else if (test.round === "2") {
+              updatedStatus.round2 = isActive;
+            } else if (test.round === "3") {
+              updatedStatus.round3 = isActive;
+            }
           });
           
-          setTestStatus(statusMap);
+          // Always make sure Round 1 is available by default
+          updatedStatus.round1 = true;
+          
+          // Update state with the processed status
+          setTestStatus(updatedStatus);
+        } else {
+          console.error("Invalid test status response format:", data);
+          // Keep default status (Round 1 unlocked)
+          setTestStatus({
+            round1: true,
+            round2: false,
+            round3: false
+          });
         }
       } catch (parseError) {
         console.error("Error parsing test status response:", parseError);
         // Keep default status (Round 1 unlocked)
+        setTestStatus({
+          round1: true,
+          round2: false,
+          round3: false
+        });
       }
     } catch (error) {
       console.error("Error fetching test status:", error);
       // Keep default status (Round 1 unlocked)
-    }
-  };
-
-  const handleTestClick = (round: number, url: string) => {
-    // For Round 3, require domain selection
-    if (round === 3 && !selectedDomain) {
-      toast.error("Please select a campus and domain first");
-      return;
-    }
-    
-    // Always allow round 1, other rounds based on previous completion
-    if (
-      (round === 1) || 
-      (round === 2 && testStatus.round1) || 
-      (round === 3 && testStatus.round2 && selectedDomain)
-    ) {
-      if (url) {
-        window.open(url, "_blank");
-      } else {
-        toast.error("Test link not available");
-      }
-    } else {
-      toast.error(`Round ${round} is locked. Complete the previous round first.`);
+      setTestStatus({
+        round1: true,
+        round2: false,
+        round3: false
+      });
     }
   };
 
@@ -265,7 +274,6 @@ const TestPage = () => {
       >
         <h2 className="text-xl text-white font-semibold mb-4">User Information</h2>
         <div className="space-y-2">
-          <p className="text-gray-300"><span className="text-purple-300">Name:</span> {userName}</p>
           <p className="text-gray-300"><span className="text-purple-300">Email:</span> {userEmail}</p>
         </div>
       </motion.div>
@@ -293,6 +301,7 @@ const TestPage = () => {
           
           <button
             onClick={() => handleTestClick(1, testLinks.round1)}
+            disabled={!testStatus.round1}
             className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-lg flex items-center justify-center hover:from-purple-700 hover:to-purple-900 transition"
           >
             <ExternalLink className="w-5 h-5 mr-2" />
@@ -328,6 +337,7 @@ const TestPage = () => {
           
           <button
             onClick={() => handleTestClick(2, testLinks.round2)}
+            disabled={!testStatus.round2}
             className={`w-full py-3 px-4 rounded-lg flex items-center justify-center transition ${
               testStatus.round2 
                 ? "bg-gradient-to-r from-purple-600 to-purple-800 text-white hover:from-purple-700 hover:to-purple-900" 
@@ -411,6 +421,7 @@ const TestPage = () => {
           <div className="mt-auto">
             <button
               onClick={() => handleTestClick(3, testLinks.round3)}
+              disabled={!testStatus.round3 || !selectedDomain}
               className={`w-full py-3 px-4 rounded-lg flex items-center justify-center transition ${
                 testStatus.round3 && selectedDomain
                   ? "bg-gradient-to-r from-purple-600 to-purple-800 text-white hover:from-purple-700 hover:to-purple-900" 
