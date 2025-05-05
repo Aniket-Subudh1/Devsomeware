@@ -197,7 +197,7 @@ const TestPage = () => {
           };
           
           // Process each test item in the array
-          data.tests.forEach(test => {
+          data.tests.forEach((test: { status: string | boolean; round: string; }) => {
             // Convert string 'true'/'false' to boolean value
             const isActive = test.status === "true" || test.status === true;
             
@@ -251,6 +251,10 @@ const TestPage = () => {
         <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
+  }
+
+  function handleTestClick(arg0: number, round1: string): void {
+    throw new Error("Function not implemented.");
   }
 
   return (
