@@ -21,11 +21,11 @@ const BaselineTestForm = () => {
     branch: "",
     campus: "",
   });
-useEffect(()=>{
-if(localStorage.getItem("testtoken")){
-  router.push("/test");
-}
-},[])
+  useEffect(() => {
+    if (localStorage.getItem("testtoken")) {
+      router.push("/test");
+    }
+  }, []);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   // Domain options based on campus
@@ -105,9 +105,6 @@ if(localStorage.getItem("testtoken")){
     // Email validation - must end with cutm.ac.in
     if (!formData.email.trim()) {
       newErrors.email = "Email is required";
-    } else if (!formData.email.endsWith("@cutm.ac.in")) {
-      newErrors.email =
-        "Email must be a valid CUTM email (ending with @cutm.ac.in)";
     }
 
     // Phone validation
@@ -138,8 +135,8 @@ if(localStorage.getItem("testtoken")){
     }
 
     setLoading(true);
-    try{
-     const response = await fetch("/api/testusers", {
+    try {
+      const response = await fetch("/api/testusers", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -172,12 +169,10 @@ if(localStorage.getItem("testtoken")){
       } else {
         toast.error(data.message || "Error in submitting the form");
       }
-    }
-    catch(err){
-      console.log("error in the baseline test form",err);
+    } catch (err) {
+      console.log("error in the baseline test form", err);
       toast.error("Error in submitting the form. Please try again later.");
     }
-    
   };
 
   return (
