@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+
 const LeadSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -54,5 +55,6 @@ const LeadSchema = new mongoose.Schema({
         required: false,
     }
 },{timestamps:true});
+
 export default mongoose.models.Leads || mongoose.model("Leads",LeadSchema);
 
