@@ -1,18 +1,9 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { QRCodeSVG } from "qrcode.react";
 import { Toaster, toast } from "sonner";
-import { Scanner } from "@yudiel/react-qr-scanner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Loader2,
-  Download,
-  UserCheck,
-  UserX,
-  CalendarDays,
-  RefreshCw,
-  Search,
-} from "lucide-react";
+import { Loader2, Clock, RefreshCw, Users, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,310 +11,198 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
 import { Badge } from "@/components/ui/badge";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { format } from "date-fns";
-import * as XLSX from "xlsx";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-export default function AttendanceAdminPage() {
-  // Authentication state
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+export default function AdminQRGenerator() {
+  // Auth state
   const [adminPassword, setAdminPassword] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Scanner state
-  const [scannerActive, setScannerActive] = useState(false);
-  const [scannerLoading, setScannerLoading] = useState(false);
-  const [scanAction, setScanAction] = useState<"check-in" | "check-out">(
-    "check-in"
-  );
-  interface ScannedData {
-    name: string;
-    email: string;
-    checkInTime?: string;
-    checkOutTime?: string;
-    duration?: number;
-  }
+  // QR state
+  const [qrData, setQrData] = useState("");
+  const [isPulsing, setIsPulsing] = useState(false);
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [qrType, setQrType] = useState("check-in");
 
-  interface AttendanceRecord {
-    testUserId: {
-      name: string;
-      regno: string;
-      branch: string;
-    };
-    email: string;
-    date: string;
-    checkInTime?: string;
-    checkOutTime?: string;
-    duration?: number;
-    status: string;
+  // Define the type for qrStats
+  interface QrStats {
+    todayCheckins: number;
+    todayCheckouts: number;
+    activeSessions: number;
   }
+  const [qrStats, setQrStats] = useState<QrStats | null>(null);
 
-  interface StudentStats {
-    name: string;
-    regno?: string;
-    branch?: string;
-    presentDays: number;
-    halfDays: number;
-    absentDays: number;
-    attendancePercentage: string;
-    totalHours: number;
-  }
+  // Time tracking for progress bar
+  const [progress, setProgress] = useState(0);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  interface DashboardStats {
+  // Authenticate admin
+  interface AuthResponse {
     success: boolean;
-    overall: {
-      totalStudents: number;
-      studentsWithAttendance: number;
-      avgAttendance: number;
-      attendanceRanges: {
-        excellent: number;
-        good: number;
-        average: number;
-        poor: number;
-      };
-    };
-    dateRange: {
-      start: string;
-      end: string;
-    };
-    studentStats: StudentStats[];
+    message?: string;
   }
 
-  const [lastScannedData, setLastScannedData] = useState<ScannedData | null>(
-    null
-  );
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
 
-  // Attendance data
-  const [attendanceRecords, setAttendanceRecords] = useState<
-    AttendanceRecord[]
-  >([]);
-  const [filteredRecords, setFilteredRecords] = useState<AttendanceRecord[]>(
-    []
-  );
-  const [searchTerm, setSearchTerm] = useState("");
-  const [dateRange, setDateRange] = useState<{
-    from: Date | undefined;
-    to: Date | undefined;
-  }>({
-    from: undefined,
-    to: undefined,
-  });
-
-  // Dashboard data
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(
-    null
-  );
-  const [timeframe, setTimeframe] = useState("month");
-  const [dashboardLoading, setDashboardLoading] = useState(false);
-
-  // Handle admin login
-  const handleLogin = () => {
     if (!adminPassword) {
       toast.error("Please enter the admin password");
       return;
     }
 
-    setLoading(true);
-    // Verify password against the one in .env through the API
-    fetchAttendanceRecords();
-  };
-
-  // Handle QR code scan
-  const handleScan = async (result: { rawValue: string }[]) => {
     try {
-      setScannerLoading(true);
-      setScannerActive(false);
+      setLoading(true);
 
-      const qrData = result[0].rawValue;
-
-      // Send scan to API to mark attendance
-      const response = await fetch("/api/attendance/check", {
+      const response = await fetch("/api/attendance/admin/verify", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          qrData,
-          adminPassword,
-          action: scanAction,
-        }),
+        body: JSON.stringify({ adminPassword }),
       });
 
-      const data = await response.json();
+      const data: AuthResponse = await response.json();
 
       if (data.success) {
-        setLastScannedData(data.data);
-        toast.success(
-          `${
-            scanAction === "check-in" ? "Check-in" : "Check-out"
-          } recorded for ${data.data.name}`
-        );
-        // Refresh attendance records
-        fetchAttendanceRecords();
-      } else {
-        toast.error(data.message || "Failed to process QR code");
-      }
-    } catch (error) {
-      console.error("Error processing QR code:", error);
-      toast.error("An error occurred. Please try again.");
-    } finally {
-      setScannerLoading(false);
-      // Re-enable scanner after a short delay
-      setTimeout(() => setScannerActive(true), 1500);
-    }
-  };
-
-  // Fetch attendance records
-  const fetchAttendanceRecords = async () => {
-    try {
-      setLoading(true);
-
-      // Format dates for API
-      const startDate = dateRange.from
-        ? format(dateRange.from, "yyyy-MM-dd")
-        : undefined;
-      const endDate = dateRange.to
-        ? format(dateRange.to, "yyyy-MM-dd")
-        : undefined;
-
-      const response = await fetch(
-        `/api/attendance/check?password=${adminPassword}${
-          startDate ? `&startDate=${startDate}` : ""
-        }${endDate ? `&endDate=${endDate}` : ""}`
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        setAttendanceRecords(data.data);
-        setFilteredRecords(data.data);
-        setIsAuthenticated(true);
+        setAuthenticated(true);
+        sessionStorage.setItem("adminAuthenticated", "true");
+        sessionStorage.setItem("adminPassword", adminPassword);
+        toast.success("Authentication successful");
       } else {
         toast.error(data.message || "Authentication failed");
-        setIsAuthenticated(false);
       }
     } catch (error) {
-      console.error("Error fetching attendance records:", error);
-      toast.error("Failed to fetch attendance records");
-      setIsAuthenticated(false);
+      console.error("Error authenticating:", error);
+      toast.error("Authentication failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch dashboard statistics
-  const fetchDashboardStats = async () => {
-    try {
-      setDashboardLoading(true);
+  // Generate QR code
+  const generateQR = async () => {
+    // Prevent multiple simultaneous requests
+    if (isGenerating) return;
 
-      const response = await fetch(
-        `/api/attendance/dashboard?password=${adminPassword}&period=${timeframe}`
-      );
+    try {
+      setIsGenerating(true);
+
+      // Reset progress bar
+      setProgress(0);
+
+      const response = await fetch("/api/attendance/admin/qr", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          adminPassword,
+          type: qrType,
+        }),
+        cache: "no-store",
+      });
 
       const data = await response.json();
 
       if (data.success) {
-        setDashboardStats(data);
+        setQrData(data.qrData);
+        setIsPulsing(true);
+        setRefreshCount((prev) => prev + 1);
+
+        // Fetch stats occasionally
+        if (refreshCount % 10 === 0) {
+          fetchQrStats();
+        }
+
+        setTimeout(() => setIsPulsing(false), 500);
       } else {
-        toast.error(data.message || "Failed to fetch dashboard statistics");
+        console.error("Failed to generate QR code:", data.message);
       }
     } catch (error) {
-      console.error("Error fetching dashboard statistics:", error);
-      toast.error("Failed to fetch dashboard statistics");
+      console.error("Error generating QR code:", error);
     } finally {
-      setDashboardLoading(false);
+      setIsGenerating(false);
     }
   };
 
-  // Filter records based on search term
-  useEffect(() => {
-    if (!attendanceRecords.length) return;
-
-    const filtered = attendanceRecords.filter(
-      (record) =>
-        record.testUserId.name
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        record.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        record.testUserId.regno.toString().includes(searchTerm)
-    );
-
-    setFilteredRecords(filtered);
-  }, [searchTerm, attendanceRecords]);
-
-  // Fetch dashboard stats when authenticated or timeframe changes
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchDashboardStats();
-    }
-  }, [isAuthenticated, timeframe]);
-
-  // Export attendance data to Excel
-  const exportToExcel = () => {
+  // Fetch QR statistics
+  const fetchQrStats = async () => {
     try {
-      // Prepare data for export
-      const exportData = filteredRecords.map((record) => ({
-        Name: record.testUserId.name,
-        "Reg No": record.testUserId.regno,
-        Email: record.email,
-        Branch: record.testUserId.branch,
-        Date: format(new Date(record.date), "yyyy-MM-dd"),
-        "Check In": record.checkInTime
-          ? format(new Date(record.checkInTime), "HH:mm:ss")
-          : "N/A",
-        "Check Out": record.checkOutTime
-          ? format(new Date(record.checkOutTime), "HH:mm:ss")
-          : "N/A",
-        Duration: record.duration ? `${record.duration} mins` : "N/A",
-        Status: record.status.charAt(0).toUpperCase() + record.status.slice(1),
-      }));
+      const response = await fetch(
+        `/api/attendance/admin/qr?password=${adminPassword}`
+      );
+      const data = await response.json();
 
-      // Create workbook
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(exportData);
-
-      // Add worksheet to workbook
-      XLSX.utils.book_append_sheet(wb, ws, "Attendance");
-
-      // Generate file name with current date
-      const fileName = `attendance_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
-
-      // Save file
-      XLSX.writeFile(wb, fileName);
-
-      toast.success("Attendance data exported successfully");
+      if (data.success) {
+        setQrStats(data.stats);
+      }
     } catch (error) {
-      console.error("Error exporting to Excel:", error);
-      toast.error("Failed to export attendance data");
+      console.error("Error fetching QR stats:", error);
     }
   };
 
-  if (!isAuthenticated) {
+  // Toggle QR type (check-in or check-out)
+  const toggleQrType = () => {
+    setQrType((prevType) =>
+      prevType === "check-in" ? "check-out" : "check-in"
+    );
+  };
+
+  // Go to dashboard
+  const goToDashboard = () => {
+    window.location.href = "/attendance-admin-dashboard";
+  };
+
+  // Check for existing authentication on component mount
+  useEffect(() => {
+    const isAuthenticated = sessionStorage.getItem("adminAuthenticated");
+    const storedPassword = sessionStorage.getItem("adminPassword");
+
+    if (isAuthenticated === "true" && storedPassword) {
+      setAuthenticated(true);
+      setAdminPassword(storedPassword);
+    }
+  }, []);
+
+  // Set up progress bar update
+  useEffect(() => {
+    if (!authenticated) return;
+
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => {
+        // Increment by 5% every 100ms (= 100% in 2 seconds)
+        const newProgress = prev + 5;
+        return newProgress > 100 ? 100 : newProgress;
+      });
+    }, 100);
+
+    return () => clearInterval(progressInterval);
+  }, [authenticated]);
+
+  // Generate QR code when progress reaches 100%
+  useEffect(() => {
+    if (progress === 100) {
+      generateQR();
+      setProgress(0); // Reset progress
+    }
+  }, [progress]);
+
+  // Initial QR generation and stats fetch
+  useEffect(() => {
+    if (authenticated) {
+      generateQR();
+      fetchQrStats();
+    }
+  }, [authenticated]);
+
+  if (!authenticated) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4">
         <Toaster richColors position="top-center" />
@@ -337,14 +216,14 @@ export default function AttendanceAdminPage() {
           <Card className="bg-black border-purple-500/30">
             <CardHeader>
               <CardTitle className="text-2xl text-center bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent">
-                Attendance Admin
+                Admin Authentication
               </CardTitle>
               <CardDescription className="text-center text-gray-400">
-                Enter the admin password to access attendance management
+                Enter the admin password to generate attendance QR codes
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-gray-300">
                     Admin Password
@@ -355,11 +234,12 @@ export default function AttendanceAdminPage() {
                     placeholder="Enter admin password"
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
+                    required
                     className="bg-gray-900 border-gray-700 text-white"
                   />
                 </div>
                 <Button
-                  onClick={handleLogin}
+                  type="submit"
                   className="w-full bg-purple-600 hover:bg-purple-700"
                   disabled={loading}
                 >
@@ -369,11 +249,14 @@ export default function AttendanceAdminPage() {
                       Authenticating...
                     </>
                   ) : (
-                    "Login"
+                    "Authenticate"
                   )}
                 </Button>
-              </div>
+              </form>
             </CardContent>
+            <CardFooter className="text-center text-xs text-gray-500">
+              This page is for administrators only
+            </CardFooter>
           </Card>
         </motion.div>
       </div>
@@ -392,683 +275,157 @@ export default function AttendanceAdminPage() {
         <div className="max-w-7xl mx-auto">
           <header className="flex flex-col md:flex-row justify-between items-center mb-8">
             <h1 className="text-3xl font-bold bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent mb-4 md:mb-0">
-              Attendance Management
+              QR Code Generator
             </h1>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                className="border-gray-700 text-gray-400 hover:bg-gray-800"
-                onClick={fetchAttendanceRecords}
-                disabled={loading}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
-                />
-                Refresh
-              </Button>
-              <Button
-                variant="outline"
-                className="border-green-700 text-green-500 hover:bg-green-900/30"
-                onClick={exportToExcel}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export to Excel
-              </Button>
-            </div>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700"
+              onClick={goToDashboard}
+            >
+              <Calendar className="h-4 w-4 mr-2" />
+              View Dashboard
+            </Button>
           </header>
 
-          <Tabs defaultValue="scanner" className="space-y-6">
-            <TabsList className="grid grid-cols-3 max-w-md mx-auto bg-gray-900">
-              <TabsTrigger value="scanner">Scanner</TabsTrigger>
-              <TabsTrigger value="records">Records</TabsTrigger>
-              <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-            </TabsList>
-
-            {/* Scanner Tab */}
-            <TabsContent value="scanner" className="space-y-6">
-              <Card className="bg-black border-purple-500/30">
-                <CardHeader>
-                  <CardTitle className="bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent">
-                    QR Code Scanner
+          <Card className="bg-black border-purple-500/30">
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle className="text-2xl bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent">
+                    Attendance QR
                   </CardTitle>
                   <CardDescription className="text-gray-400">
-                    Scan QR codes to record student attendance
+                    Students scan this code to mark attendance
                   </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-center mb-4">
-                      <div className="flex space-x-2">
-                        <Button
-                          variant={
-                            scanAction === "check-in" ? "default" : "outline"
-                          }
-                          className={
-                            scanAction === "check-in"
-                              ? "bg-green-600 hover:bg-green-700"
-                              : "border-gray-700 text-gray-400 hover:bg-gray-800"
-                          }
-                          onClick={() => setScanAction("check-in")}
-                        >
-                          <UserCheck className="h-4 w-4 mr-2" />
-                          Check In
-                        </Button>
-                        <Button
-                          variant={
-                            scanAction === "check-out" ? "default" : "outline"
-                          }
-                          className={
-                            scanAction === "check-out"
-                              ? "bg-blue-600 hover:bg-blue-700"
-                              : "border-gray-700 text-gray-400 hover:bg-gray-800"
-                          }
-                          onClick={() => setScanAction("check-out")}
-                        >
-                          <UserX className="h-4 w-4 mr-2" />
-                          Check Out
-                        </Button>
-                      </div>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={
+                    qrType === "check-in"
+                      ? "bg-green-900/20 text-green-400 border-green-500/30"
+                      : "bg-blue-900/20 text-blue-400 border-blue-500/30"
+                  }
+                >
+                  {qrType === "check-in" ? "Check In" : "Check Out"}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center">
+              {/* Countdown display */}
+              <div className="mb-2">
+                <Badge variant="outline" className="bg-gray-800/60 text-white">
+                  <Clock className="h-3 w-3 mr-1" />
+                  <span>
+                    Next refresh in {Math.ceil((2 * (100 - progress)) / 100)}{" "}
+                    seconds
+                  </span>
+                </Badge>
+              </div>
+
+              {/* QR Stats */}
+              {qrStats && (
+                <div className="w-full mb-4 grid grid-cols-2 gap-2">
+                  <div className="bg-gray-900/50 p-3 rounded-lg border border-gray-800">
+                    <div className="text-xs text-gray-400">
+                      Today&apos;s Check-ins
                     </div>
-
-                    <div className="relative overflow-hidden rounded-lg border border-gray-700 aspect-video max-w-md mx-auto">
-                      {scannerActive ? (
-                        <Scanner
-                          onScan={(result) => handleScan(result)}
-                          onError={(error) => console.error(error)}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gray-900">
-                          <Button
-                            onClick={() => setScannerActive(true)}
-                            disabled={scannerLoading}
-                          >
-                            {scannerLoading ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Processing...
-                              </>
-                            ) : (
-                              <>Start Scanner</>
-                            )}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-
-                    {lastScannedData && (
-                      <div className="mt-4 p-4 border border-gray-700 rounded-lg bg-gray-900/50">
-                        <h3 className="text-lg font-medium text-white mb-2">
-                          Last Scan Result
-                        </h3>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div className="text-gray-400">Name:</div>
-                          <div className="text-white font-medium">
-                            {lastScannedData.name}
-                          </div>
-
-                          <div className="text-gray-400">Email:</div>
-                          <div className="text-white font-medium">
-                            {lastScannedData.email}
-                          </div>
-
-                          <div className="text-gray-400">Time:</div>
-                          <div className="text-white font-medium">
-                            {lastScannedData.checkOutTime
-                              ? format(
-                                  new Date(lastScannedData.checkOutTime),
-                                  "HH:mm:ss"
-                                )
-                              : lastScannedData.checkInTime
-                              ? format(
-                                  new Date(lastScannedData.checkInTime),
-                                  "HH:mm:ss"
-                                )
-                              : "N/A"}
-                          </div>
-
-                          {lastScannedData.duration && (
-                            <>
-                              <div className="text-gray-400">Duration:</div>
-                              <div className="text-white font-medium">
-                                {lastScannedData.duration} minutes
-                              </div>
-                            </>
-                          )}
-
-                          <div className="text-gray-400">Status:</div>
-                          <div className="text-white font-medium">
-                            <Badge
-                              variant="outline"
-                              className="bg-green-900/20 text-green-400 border-green-500/30"
-                            >
-                              {scanAction === "check-in"
-                                ? "Checked In"
-                                : "Checked Out"}
-                            </Badge>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Records Tab */}
-            <TabsContent value="records" className="space-y-6">
-              <Card className="bg-black border-purple-500/30">
-                <CardHeader>
-                  <CardTitle className="bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent">
-                    Attendance Records
-                  </CardTitle>
-                  <CardDescription className="text-gray-400">
-                    View and filter attendance records
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      <div className="flex-1">
-                        <div className="relative">
-                          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-                          <Input
-                            placeholder="Search by name, email, or reg. no"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-8 bg-gray-900 border-gray-700 text-white"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full sm:w-auto justify-start text-left font-normal border-gray-700 text-gray-400 hover:bg-gray-800"
-                            >
-                              <CalendarDays className="mr-2 h-4 w-4" />
-                              {dateRange.from ? (
-                                dateRange.to ? (
-                                  <>
-                                    {format(dateRange.from, "LLL dd, y")} -{" "}
-                                    {format(dateRange.to, "LLL dd, y")}
-                                  </>
-                                ) : (
-                                  format(dateRange.from, "LLL dd, y")
-                                )
-                              ) : (
-                                <span>Pick a date range</span>
-                              )}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent
-                            className="w-auto p-0 bg-gray-900 border-gray-700"
-                            align="end"
-                          >
-                            <Calendar
-                              initialFocus
-                              mode="range"
-                              selected={dateRange}
-                              onSelect={(range) => {
-                                if (range) {
-                                  setDateRange({
-                                    from: range.from,
-                                    to: range.to,
-                                  });
-                                  if (
-                                    range.from &&
-                                    (range.to || !dateRange.to)
-                                  ) {
-                                    fetchAttendanceRecords();
-                                  }
-                                } else {
-                                  setDateRange({
-                                    from: undefined,
-                                    to: undefined,
-                                  });
-                                }
-                              }}
-                              numberOfMonths={2}
-                              className="bg-gray-900 text-white"
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    </div>
-
-                    <div className="rounded-md border border-gray-700">
-                      <div className="relative overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-gray-900/50 hover:bg-gray-900">
-                              <TableHead className="text-gray-400">
-                                Name
-                              </TableHead>
-                              <TableHead className="text-gray-400">
-                                Reg. No.
-                              </TableHead>
-                              <TableHead className="text-gray-400">
-                                Date
-                              </TableHead>
-                              <TableHead className="text-gray-400">
-                                Check In
-                              </TableHead>
-                              <TableHead className="text-gray-400">
-                                Check Out
-                              </TableHead>
-                              <TableHead className="text-gray-400">
-                                Duration
-                              </TableHead>
-                              <TableHead className="text-gray-400">
-                                Status
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredRecords.length === 0 ? (
-                              <TableRow>
-                                <TableCell
-                                  colSpan={7}
-                                  className="h-24 text-center text-gray-500"
-                                >
-                                  No attendance records found
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              filteredRecords.map((record, index) => (
-                                <TableRow
-                                  key={index}
-                                  className="hover:bg-gray-900/50 border-t border-gray-800"
-                                >
-                                  <TableCell className="font-medium text-white">
-                                    {record.testUserId?.name || "Unknown"}
-                                  </TableCell>
-                                  <TableCell className="text-gray-300">
-                                    {record.testUserId?.regno || "N/A"}
-                                  </TableCell>
-                                  <TableCell className="text-gray-300">
-                                    {format(
-                                      new Date(record.date),
-                                      "yyyy-MM-dd"
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-gray-300">
-                                    {record.checkInTime
-                                      ? format(
-                                          new Date(record.checkInTime),
-                                          "HH:mm:ss"
-                                        )
-                                      : "N/A"}
-                                  </TableCell>
-                                  <TableCell className="text-gray-300">
-                                    {record.checkOutTime
-                                      ? format(
-                                          new Date(record.checkOutTime),
-                                          "HH:mm:ss"
-                                        )
-                                      : "N/A"}
-                                  </TableCell>
-                                  <TableCell className="text-gray-300">
-                                    {record.duration
-                                      ? `${record.duration} mins`
-                                      : "N/A"}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge
-                                      variant="outline"
-                                      className={
-                                        record.status === "present"
-                                          ? "bg-green-900/20 text-green-400 border-green-500/30"
-                                          : record.status === "half-day"
-                                          ? "bg-yellow-900/20 text-yellow-400 border-yellow-500/30"
-                                          : "bg-red-900/20 text-red-400 border-red-500/30"
-                                      }
-                                    >
-                                      {record.status.charAt(0).toUpperCase() +
-                                        record.status.slice(1)}
-                                    </Badge>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
+                    <div className="text-xl font-bold text-white">
+                      {qrStats.todayCheckins || 0}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Dashboard Tab */}
-            <TabsContent value="dashboard" className="space-y-6">
-              <Card className="bg-black border-purple-500/30">
-                <CardHeader>
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                    <div>
-                      <CardTitle className="bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent">
-                        Attendance Dashboard
-                      </CardTitle>
-                      <CardDescription className="text-gray-400">
-                        Overview and statistics of attendance
-                      </CardDescription>
+                  <div className="bg-gray-900/50 p-3 rounded-lg border border-gray-800">
+                    <div className="text-xs text-gray-400">
+                      Today&apos;s Check-outs
                     </div>
-                    <div className="mt-4 sm:mt-0">
-                      <Select value={timeframe} onValueChange={setTimeframe}>
-                        <SelectTrigger className="w-[180px] border-gray-700 bg-gray-900 text-white">
-                          <SelectValue placeholder="Select period" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-900 border-gray-700 text-white">
-                          <SelectItem value="day">Today</SelectItem>
-                          <SelectItem value="week">This Week</SelectItem>
-                          <SelectItem value="month">This Month</SelectItem>
-                          <SelectItem value="total">All Time</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="text-xl font-bold text-white">
+                      {qrStats.todayCheckouts || 0}
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  {dashboardLoading ? (
-                    <div className="h-64 flex items-center justify-center">
-                      <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
-                    </div>
-                  ) : !dashboardStats ? (
-                    <div className="h-64 flex items-center justify-center text-gray-500">
-                      No dashboard data available
-                    </div>
-                  ) : (
-                    <div className="space-y-8">
-                      {/* Overview Statistics */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Card className="bg-gray-900/50 border-gray-800">
-                          <CardContent className="pt-6">
-                            <div className="text-center">
-                              <div className="text-sm font-medium text-gray-400">
-                                Total Students
-                              </div>
-                              <div className="text-3xl font-bold text-white mt-2">
-                                {dashboardStats.overall.totalStudents}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+                </div>
+              )}
 
-                        <Card className="bg-gray-900/50 border-gray-800">
-                          <CardContent className="pt-6">
-                            <div className="text-center">
-                              <div className="text-sm font-medium text-gray-400">
-                                Active Students
-                              </div>
-                              <div className="text-3xl font-bold text-white mt-2">
-                                {dashboardStats.overall.studentsWithAttendance}
-                              </div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                {(
-                                  (dashboardStats.overall
-                                    .studentsWithAttendance /
-                                    dashboardStats.overall.totalStudents) *
-                                  100
-                                ).toFixed(1)}
-                                %
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+              {/* QR refresh progress */}
+              <div className="w-full mb-4">
+                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                  <span>QR Refresh Progress</span>
+                  <span>Refreshed: {refreshCount} times</span>
+                </div>
+                <Progress value={progress} className="h-1" />
+              </div>
 
-                        <Card className="bg-gray-900/50 border-gray-800">
-                          <CardContent className="pt-6">
-                            <div className="text-center">
-                              <div className="text-sm font-medium text-gray-400">
-                                Avg. Attendance
-                              </div>
-                              <div className="text-3xl font-bold text-white mt-2">
-                                {dashboardStats.overall.avgAttendance}%
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+              <div
+                className={`bg-white p-8 rounded-lg mb-6 transition-all ${
+                  isPulsing
+                    ? "scale-105 shadow-lg shadow-purple-500/20"
+                    : "scale-100"
+                }`}
+              >
+                {isGenerating && !qrData ? (
+                  <div className="w-64 h-64 flex items-center justify-center">
+                    <Loader2 className="h-12 w-12 animate-spin text-purple-500" />
+                  </div>
+                ) : qrData ? (
+                  <QRCodeSVG
+                    value={qrData}
+                    size={256}
+                    level="H"
+                    includeMargin={true}
+                    fgColor={qrType === "check-in" ? "#16a34a" : "#2563eb"}
+                  />
+                ) : (
+                  <div className="w-64 h-64 flex items-center justify-center bg-gray-200">
+                    <p className="text-gray-500">QR code not generated</p>
+                  </div>
+                )}
+              </div>
 
-                        <Card className="bg-gray-900/50 border-gray-800">
-                          <CardContent className="pt-6">
-                            <div className="text-center">
-                              <div className="text-sm font-medium text-gray-400">
-                                Date Range
-                              </div>
-                              <div className="text-lg font-medium text-white mt-2">
-                                {dashboardStats.dateRange.start} to{" "}
-                                {dashboardStats.dateRange.end}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
+              <div className="w-full space-y-4">
+                <Alert className="bg-gray-900/40 border-purple-500/30">
+                  <Clock className="h-4 w-4 text-purple-500" />
+                  <AlertTitle className="text-white">
+                    Dynamic QR Code
+                  </AlertTitle>
+                  <AlertDescription className="text-gray-400">
+                    This code changes every 2 seconds. Students should scan it
+                    to record their attendance.
+                  </AlertDescription>
+                </Alert>
 
-                      {/* Attendance Breakdown */}
-                      <div>
-                        <h3 className="text-lg font-medium text-white mb-4">
-                          Attendance Breakdown
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                          <Card className="bg-green-900/10 border-green-900/30">
-                            <CardContent className="pt-6">
-                              <div className="text-center">
-                                <div className="text-sm font-medium text-green-400">
-                                  Excellent (90%+)
-                                </div>
-                                <div className="text-3xl font-bold text-white mt-2">
-                                  {
-                                    dashboardStats.overall.attendanceRanges
-                                      .excellent
-                                  }
-                                </div>
-                                <div className="text-xs text-gray-400 mt-1">
-                                  {(
-                                    (dashboardStats.overall.attendanceRanges
-                                      .excellent /
-                                      dashboardStats.overall.totalStudents) *
-                                    100
-                                  ).toFixed(1)}
-                                  % of students
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-
-                          <Card className="bg-blue-900/10 border-blue-900/30">
-                            <CardContent className="pt-6">
-                              <div className="text-center">
-                                <div className="text-sm font-medium text-blue-400">
-                                  Good (75-89%)
-                                </div>
-                                <div className="text-3xl font-bold text-white mt-2">
-                                  {dashboardStats.overall.attendanceRanges.good}
-                                </div>
-                                <div className="text-xs text-gray-400 mt-1">
-                                  {(
-                                    (dashboardStats.overall.attendanceRanges
-                                      .good /
-                                      dashboardStats.overall.totalStudents) *
-                                    100
-                                  ).toFixed(1)}
-                                  % of students
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-
-                          <Card className="bg-yellow-900/10 border-yellow-900/30">
-                            <CardContent className="pt-6">
-                              <div className="text-center">
-                                <div className="text-sm font-medium text-yellow-400">
-                                  Average (60-74%)
-                                </div>
-                                <div className="text-3xl font-bold text-white mt-2">
-                                  {
-                                    dashboardStats.overall.attendanceRanges
-                                      .average
-                                  }
-                                </div>
-                                <div className="text-xs text-gray-400 mt-1">
-                                  {(
-                                    (dashboardStats.overall.attendanceRanges
-                                      .average /
-                                      dashboardStats.overall.totalStudents) *
-                                    100
-                                  ).toFixed(1)}
-                                  % of students
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-
-                          <Card className="bg-red-900/10 border-red-900/30">
-                            <CardContent className="pt-6">
-                              <div className="text-center">
-                                <div className="text-sm font-medium text-red-400">
-                                  Poor (&lt; 60%)
-                                </div>
-                                <div className="text-3xl font-bold text-white mt-2">
-                                  {dashboardStats.overall.attendanceRanges.poor}
-                                </div>
-                                <div className="text-xs text-gray-400 mt-1">
-                                  {(
-                                    (dashboardStats.overall.attendanceRanges
-                                      .poor /
-                                      dashboardStats.overall.totalStudents) *
-                                    100
-                                  ).toFixed(1)}
-                                  % of students
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </div>
-                      </div>
-
-                      {/* Student Attendance Table */}
-                      <div>
-                        <h3 className="text-lg font-medium text-white mb-4">
-                          Student Attendance Ranking
-                        </h3>
-                        <div className="rounded-md border border-gray-700">
-                          <div className="relative overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow className="bg-gray-900/50 hover:bg-gray-900">
-                                  <TableHead className="text-gray-400">
-                                    Name
-                                  </TableHead>
-                                  <TableHead className="text-gray-400">
-                                    Reg. No.
-                                  </TableHead>
-                                  <TableHead className="text-gray-400">
-                                    Branch
-                                  </TableHead>
-                                  <TableHead className="text-gray-400">
-                                    Present Days
-                                  </TableHead>
-                                  <TableHead className="text-gray-400">
-                                    Half Days
-                                  </TableHead>
-                                  <TableHead className="text-gray-400">
-                                    Absent Days
-                                  </TableHead>
-                                  <TableHead className="text-gray-400">
-                                    Attendance %
-                                  </TableHead>
-                                  <TableHead className="text-gray-400">
-                                    Total Hours
-                                  </TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {dashboardStats.studentStats.length === 0 ? (
-                                  <TableRow>
-                                    <TableCell
-                                      colSpan={8}
-                                      className="h-24 text-center text-gray-500"
-                                    >
-                                      No student data found
-                                    </TableCell>
-                                  </TableRow>
-                                ) : (
-                                  dashboardStats.studentStats.map(
-                                    (
-                                      student: {
-                                        name: string;
-                                        regno?: string;
-                                        branch?: string;
-                                        presentDays: number;
-                                        halfDays: number;
-                                        absentDays: number;
-                                        attendancePercentage: string;
-                                        totalHours: number;
-                                      },
-                                      index: number
-                                    ) => (
-                                      <TableRow
-                                        key={index}
-                                        className="hover:bg-gray-900/50 border-t border-gray-800"
-                                      >
-                                        <TableCell className="font-medium text-white">
-                                          {student.name}
-                                        </TableCell>
-                                        <TableCell className="text-gray-300">
-                                          {student.regno || "N/A"}
-                                        </TableCell>
-                                        <TableCell className="text-gray-300">
-                                          {student.branch || "N/A"}
-                                        </TableCell>
-                                        <TableCell className="text-gray-300">
-                                          {student.presentDays}
-                                        </TableCell>
-                                        <TableCell className="text-gray-300">
-                                          {student.halfDays}
-                                        </TableCell>
-                                        <TableCell className="text-gray-300">
-                                          {student.absentDays}
-                                        </TableCell>
-                                        <TableCell>
-                                          <Badge
-                                            variant="outline"
-                                            className={
-                                              parseFloat(
-                                                student.attendancePercentage
-                                              ) >= 90
-                                                ? "bg-green-900/20 text-green-400 border-green-500/30"
-                                                : parseFloat(
-                                                    student.attendancePercentage
-                                                  ) >= 75
-                                                ? "bg-blue-900/20 text-blue-400 border-blue-500/30"
-                                                : parseFloat(
-                                                    student.attendancePercentage
-                                                  ) >= 60
-                                                ? "bg-yellow-900/20 text-yellow-400 border-yellow-500/30"
-                                                : "bg-red-900/20 text-red-400 border-red-500/30"
-                                            }
-                                          >
-                                            {student.attendancePercentage}%
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-gray-300">
-                                          {student.totalHours}
-                                        </TableCell>
-                                      </TableRow>
-                                    )
-                                  )
-                                )}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+                <div className="flex justify-center space-x-2">
+                  <Button
+                    variant="outline"
+                    className={
+                      qrType === "check-in"
+                        ? "border-green-500/30 text-green-500 hover:bg-green-950/30"
+                        : "border-blue-500/30 text-blue-500 hover:bg-blue-950/30"
+                    }
+                    onClick={toggleQrType}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Switch to {qrType === "check-in" ? "Check Out" : "Check In"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-gray-700 text-gray-400 hover:bg-gray-800"
+                    onClick={() => {
+                      setProgress(0);
+                      generateQR();
+                    }}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh Now
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-center">
+              <div className="flex items-center text-xs text-gray-500">
+                <Users className="h-3 w-3 mr-1" />
+                <span className="mr-3">
+                  Active Sessions: {qrStats?.activeSessions || 0}
+                </span>
+              </div>
+            </CardFooter>
+          </Card>
         </div>
       </motion.div>
     </div>

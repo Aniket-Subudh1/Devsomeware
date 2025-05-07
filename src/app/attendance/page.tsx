@@ -1,18 +1,9 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { QRCodeSVG } from "qrcode.react";
+import { Scanner } from "@yudiel/react-qr-scanner";
 import { Toaster, toast } from "sonner";
-import {
-  Loader2,
-  Clock,
-  LogOut,
-  Clipboard,
-  AlertTriangle,
-  CheckCircle2,
-  User,
-  CalendarDays,
-} from "lucide-react";
+import { Loader2, AlertTriangle, UserCheck, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,63 +16,35 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-  interface UserInfo {
-    name?: string;
-    regno?: string;
-    branch?: string;
-    email?: string;
-  }
-  
-export default function AttendancePage() {
+
+interface StudentInfo {
+  name?: string;
+  email?: string;
+  id?: string;
+  [key: string]: string | number | boolean | undefined;
+}
+
+export default function StudentScanner() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [qrLoading, setQrLoading] = useState(false);
-  const [token, setToken] = useState("");
-  const [qrCode, setQrCode] = useState("");
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [isPulsing, setIsPulsing] = useState(false);
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const [refreshCount, setRefreshCount] = useState(0);
+  const [scannerActive, setScannerActive] = useState(false);
+  const [scannerLoading, setScannerLoading] = useState(false);
+  const [sessionToken, setSessionToken] = useState("");
+  const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null);
+  const [attendanceStatus, setAttendanceStatus] = useState<{
+    lastCheckIn: string | null;
+    lastCheckOut: string | null;
+    lastAction: "check-in" | "check-out" | null;
+  }>({
+    lastCheckIn: null,
+    lastCheckOut: null,
+    lastAction: null,
+  });
+  const [deviceId, setDeviceId] = useState("");
 
-  // Function to get remaining time for token expiration (12 hours)
-  const calculateTimeLeft = useCallback(() => {
-    if (!token) return null;
-
-    try {
-      // Extract token expiration time (assuming JWT)
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      const expTime = payload.exp * 1000; // Convert to milliseconds
-      const now = Date.now();
-
-      if (expTime > now) {
-        return Math.floor((expTime - now) / 1000); // Return seconds left
-      }
-      return 0;
-    } catch (error) {
-      console.error("Error calculating time left:", error);
-      return null;
-    }
-  }, [token]);
-
-  // Format seconds into hours, minutes, seconds
-  const formatTime = (seconds: number) => {
-    if (seconds <= 0) return "Expired";
-
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-
-    return `${hours.toString().padStart(2, "0")}:${minutes
-      .toString()
-      .padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  // Submit email to get token
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Login with student email
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!email) {
@@ -92,217 +55,248 @@ export default function AttendancePage() {
     try {
       setLoading(true);
 
-      const response = await fetch("/api/attendance", {
+      // Register the device ID (browser fingerprint) along with the email
+      const deviceFingerprint = await generateDeviceFingerprint();
+      setDeviceId(deviceFingerprint);
+
+      const response = await fetch("/api/attendance/student/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({
+          email,
+          deviceId: deviceFingerprint,
+        }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setToken(data.token);
-        toast.success("Attendance session started successfully");
-        // Save token in sessionStorage to persist across page reloads
-        sessionStorage.setItem("attendanceToken", data.token);
+        setSessionToken(data.token);
+        setStudentInfo(data.student);
+        setAttendanceStatus({
+          lastCheckIn: data.lastCheckIn,
+          lastCheckOut: data.lastCheckOut,
+          lastAction: data.lastAction,
+        });
 
-        // Get user info from the attendance token response if available
-        if (data.user) {
-          setUserInfo(data.user);
-          sessionStorage.setItem(
-            "attendanceUserInfo",
-            JSON.stringify(data.user)
-          );
-        } else {
-          // User info not provided in the attendance token response
-          // We can use this info directly from the attendance API
-          console.log("No user info provided in attendance token response");
-        }
+        // Store in localStorage to persist the session
+        localStorage.setItem("studentAttendanceToken", data.token);
+        localStorage.setItem("studentAttendanceEmail", email);
+        localStorage.setItem("studentAttendanceDeviceId", deviceFingerprint);
+
+        toast.success("Login successful");
       } else {
-        toast.error(data.message || "Failed to start attendance session");
+        toast.error(data.message || "Login failed");
       }
     } catch (error) {
-      console.error("Error starting attendance session:", error);
+      console.error("Error logging in:", error);
       toast.error("An error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Function to fetch QR code data
-  const fetchQrCode = useCallback(async () => {
-    if (!token) return;
-
+  // Handle QR code scan
+  const handleScan = async (result: { rawValue: string }[]) => {
     try {
-      setQrLoading(true);
+      setScannerLoading(true);
+      setScannerActive(false);
 
-      const response = await fetch(`/api/attendance?token=${token}`);
-      const data = await response.json();
+      const qrData = result[0].rawValue;
+      let qrPayload;
 
-      if (data.success) {
-        setQrCode(data.qrData);
-        setIsPulsing(true);
-        setLastRefresh(new Date());
-        setRefreshCount((prev) => prev + 1);
-        setTimeout(() => setIsPulsing(false), 500); // Pulse effect for 500ms
-      } else {
-        console.error("Error fetching QR code:", data.message);
-        // If token is invalid, clear the session
-        if (
-          data.message === "Invalid token" ||
-          data.message === "Invalid or expired token"
-        ) {
-          handleLogout();
-          toast.error("Your session has expired. Please login again.");
-        }
+      try {
+        qrPayload = JSON.parse(qrData);
+      } catch {
+        toast.error("Invalid QR code format");
+        setScannerLoading(false);
+        setScannerActive(true);
+        return;
       }
-    } catch (error) {
-      console.error("Error fetching QR code:", error);
-    } finally {
-      setQrLoading(false);
-    }
-  }, [token]);
 
-  // Keep token valid by sending periodic heartbeats
-  const pingToken = useCallback(async () => {
-    if (!token) return;
+      // Verify the QR code is recent (within last 5 seconds to allow scanning time)
+      const currentTime = Math.floor(Date.now() / 1000);
+      if (currentTime - qrPayload.timestamp > 5) {
+        toast.error("QR code has expired. Please scan a fresh code.");
+        setScannerLoading(false);
+        setScannerActive(true);
+        return;
+      }
 
-    try {
-      const response = await fetch("/api/attendance", {
-        method: "PATCH",
+      // Send the scan to the server
+      const response = await fetch("/api/attendance/student/record", {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({
+          token: sessionToken,
+          qrData,
+          email: email,
+          deviceId: deviceId,
+          type: qrPayload.type, // check-in or check-out
+        }),
       });
 
       const data = await response.json();
 
-      // If token is invalid, clear the session
-      if (!data.success) {
-        handleLogout();
-        toast.error("Your session has expired. Please login again.");
+      if (data.success) {
+        // Update attendance status
+        setAttendanceStatus({
+          lastCheckIn:
+            qrPayload.type === "check-in"
+              ? new Date().toISOString()
+              : attendanceStatus.lastCheckIn,
+          lastCheckOut:
+            qrPayload.type === "check-out"
+              ? new Date().toISOString()
+              : attendanceStatus.lastCheckOut,
+          lastAction: qrPayload.type as "check-in" | "check-out",
+        });
+
+        toast.success(
+          `${
+            qrPayload.type === "check-in" ? "Check-in" : "Check-out"
+          } recorded successfully`
+        );
+      } else {
+        toast.error(data.message || "Failed to record attendance");
       }
     } catch (error) {
-      console.error("Error pinging token:", error);
-    }
-  }, [token]);
-
-  // Handle logout - clear token
-  const handleLogout = () => {
-    // Show confirmation dialog
-    if (
-      token &&
-      confirm("Are you sure you want to end your attendance session?")
-    ) {
-      setToken("");
-      setQrCode("");
-      setTimeLeft(null);
-      setUserInfo(null);
-      setRefreshCount(0);
-      sessionStorage.removeItem("attendanceToken");
-      sessionStorage.removeItem("attendanceUserInfo");
-      toast.info("Attendance session ended");
+      console.error("QR scan error:", error);
+      toast.error("An error occurred. Please try again.");
+    } finally {
+      setScannerLoading(false);
+      // Re-enable scanner after a short delay
+      setTimeout(() => setScannerActive(true), 1500);
     }
   };
 
-  // Try to restore token from sessionStorage on page load
+  // Generate device fingerprint (simple implementation)
+  const generateDeviceFingerprint = async () => {
+    // Collect browser and device info
+    const userAgent = navigator.userAgent;
+    const screenWidth = window.screen.width;
+    const screenHeight = window.screen.height;
+    const colorDepth = window.screen.colorDepth;
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const language = navigator.language;
+    const deviceMemory =
+      (navigator as Navigator & { deviceMemory?: number }).deviceMemory ||
+      "unknown";
+
+    // Create a device fingerprint string
+    const fingerprintString = `${userAgent}|${screenWidth}x${screenHeight}|${colorDepth}|${timezone}|${language}|${deviceMemory}`;
+
+    // Hash the fingerprint (simple hash for demo)
+    const encoder = new TextEncoder();
+    const data = encoder.encode(fingerprintString);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+
+    // Convert hash to hex string
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    return hashHex;
+  };
+
+  // Attempt to restore session on component mount
   useEffect(() => {
-    const storedToken = sessionStorage.getItem("attendanceToken");
-    const storedUserInfo = sessionStorage.getItem("attendanceUserInfo");
+    const storedToken = localStorage.getItem("studentAttendanceToken");
+    const storedEmail = localStorage.getItem("studentAttendanceEmail");
+    const storedDeviceId = localStorage.getItem("studentAttendanceDeviceId");
 
-    if (storedToken) {
-      setToken(storedToken);
-    }
+    if (storedToken && storedEmail && storedDeviceId) {
+      setSessionToken(storedToken);
+      setEmail(storedEmail);
+      setDeviceId(storedDeviceId);
 
-    if (storedUserInfo) {
-      try {
-        setUserInfo(JSON.parse(storedUserInfo));
-      } catch (error) {
-        console.error("Error parsing stored user info:", error);
-      }
+      // Verify the session is still valid and get latest status
+      const verifySession = async () => {
+        try {
+          setLoading(true);
+
+          const response = await fetch("/api/attendance/student/verify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              token: storedToken,
+              email: storedEmail,
+              deviceId: storedDeviceId,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            setStudentInfo(data.student);
+            setAttendanceStatus({
+              lastCheckIn: data.lastCheckIn,
+              lastCheckOut: data.lastCheckOut,
+              lastAction: data.lastAction,
+            });
+          } else {
+            // Session is invalid, clear local storage
+            localStorage.removeItem("studentAttendanceToken");
+            localStorage.removeItem("studentAttendanceEmail");
+            localStorage.removeItem("studentAttendanceDeviceId");
+            setSessionToken("");
+            toast.error("Your session has expired. Please login again.");
+          }
+        } catch (error) {
+          console.error("Error verifying session:", error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      verifySession();
     }
   }, []);
 
-  // Update QR code every 2 seconds
+  // Format attendance time for display
+  const formatAttendanceTime = (timestamp: string | null) => {
+    if (!timestamp) return "Not recorded";
+
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleString();
+    } catch {
+      return "Invalid time";
+    }
+  };
+
+  // Prevent users from clearing their session by adding an event listener to storage changes
   useEffect(() => {
-    if (!token) return;
+    const handleStorageChange = (e: StorageEvent) => {
+      if (
+        e.key === "studentAttendanceToken" ||
+        e.key === "studentAttendanceEmail" ||
+        e.key === "studentAttendanceDeviceId"
+      ) {
+        if (!e.newValue && sessionToken) {
+          // Someone tried to clear the storage, restore it
+          localStorage.setItem("studentAttendanceToken", sessionToken);
+          localStorage.setItem("studentAttendanceEmail", email);
+          localStorage.setItem("studentAttendanceDeviceId", deviceId);
 
-    fetchQrCode(); // Fetch immediately on token change
-
-    // Set up polling interval
-    const qrInterval = setInterval(fetchQrCode, 2000);
-
-    // Clean up
-    return () => clearInterval(qrInterval);
-  }, [token, fetchQrCode]);
-
-  // Update time left counter
-  useEffect(() => {
-    if (!token) return;
-
-    const updateTimeLeft = () => {
-      const newTimeLeft = calculateTimeLeft();
-      setTimeLeft(newTimeLeft);
-
-      // If token is expired, log out
-      if (newTimeLeft !== null && newTimeLeft <= 0) {
-        handleLogout();
-        toast.error("Your session has expired. Please login again.");
+          toast.error("You cannot manually clear your attendance session.");
+        }
       }
     };
 
-    // Update immediately
-    updateTimeLeft();
+    window.addEventListener("storage", handleStorageChange);
 
-    // Set up interval
-    const timeInterval = setInterval(updateTimeLeft, 1000);
-
-    // Clean up
-    return () => clearInterval(timeInterval);
-  }, [token, calculateTimeLeft]);
-
-  // Keep session alive with ping every minute
-  useEffect(() => {
-    if (!token) return;
-
-    // Send ping immediately
-    pingToken();
-
-    // Set up interval
-    const pingInterval = setInterval(pingToken, 60000); // Every minute
-
-    // Clean up
-    return () => clearInterval(pingInterval);
-  }, [token, pingToken]);
-
-  // Prevent direct navigation away from the page for security
-  useEffect(() => {
-    if (!token) return;
-
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      return (e.returnValue =
-        "Are you sure you want to leave? Your attendance session will remain active.");
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
     };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [token]);
-
-  // Calculate QR refresh progress
-  const qrRefreshProgress = () => {
-    if (!lastRefresh) return 100;
-
-    const now = new Date();
-    const elapsed = now.getTime() - lastRefresh.getTime();
-    const percent = (elapsed / 2000) * 100; // 2000ms = 2s
-
-    return Math.min(100, percent);
-  };
+  }, [sessionToken, email, deviceId]);
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
@@ -314,30 +308,18 @@ export default function AttendancePage() {
         transition={{ duration: 0.5 }}
         className="w-full max-w-md"
       >
-        {!token ? (
+        {!sessionToken ? (
           <Card className="bg-black border-purple-500/30">
             <CardHeader>
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2, duration: 0.5 }}
-              >
-                <CardTitle className="text-2xl text-center bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent">
-                  Attendance Login
-                </CardTitle>
-                <CardDescription className="text-center text-gray-400">
-                  Enter your registered email to start your attendance session
-                </CardDescription>
-              </motion.div>
+              <CardTitle className="text-2xl text-center bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent">
+                Student Attendance
+              </CardTitle>
+              <CardDescription className="text-center text-gray-400">
+                Enter your email to start scanning attendance QR codes
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <motion.form
-                onSubmit={handleSubmit}
-                className="space-y-4"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3, duration: 0.5 }}
-              >
+              <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-gray-300">
                     Email
@@ -360,190 +342,152 @@ export default function AttendancePage() {
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Loading...
+                      Logging in...
                     </>
                   ) : (
-                    "Start Attendance Session"
+                    "Start Attendance"
                   )}
                 </Button>
-              </motion.form>
+              </form>
             </CardContent>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4, duration: 0.5 }}
-            >
-              <CardFooter className="text-center text-xs text-gray-500">
-                Your session will remain active for 12 hours or until you log
-                out
-              </CardFooter>
-            </motion.div>
+            <CardFooter className="text-center text-xs text-gray-500">
+              You must use your registered email address
+            </CardFooter>
           </Card>
         ) : (
           <Card className="bg-black border-purple-500/30">
             <CardHeader>
               <div className="flex justify-between items-center">
-                <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5 }}
-                >
+                <div>
                   <CardTitle className="text-2xl bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent">
-                    Attendance QR
+                    QR Scanner
                   </CardTitle>
                   <CardDescription className="text-gray-400">
-                    Show this code to mark attendance
+                    Scan the attendance QR code
                   </CardDescription>
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <Badge
-                    variant="outline"
-                    className="flex items-center space-x-1"
-                  >
-                    <Clock className="h-3 w-3" />
-                    <span>
-                      {timeLeft !== null ? formatTime(timeLeft) : "Loading..."}
-                    </span>
-                  </Badge>
-                </motion.div>
+                </div>
+                <Badge className="bg-purple-600">
+                  {studentInfo?.name || email}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent className="flex flex-col items-center">
-              {/* User info if available */}
-              {userInfo && (
-                <motion.div
-                  className="w-full mb-4"
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-950/20 border border-purple-500/20">
-                    <Avatar className="h-12 w-12 border-2 border-purple-500/30">
-                      <AvatarFallback className="bg-purple-950 text-white">
-                        {userInfo.name
-                          ? userInfo.name.charAt(0).toUpperCase()
-                          : "S"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-base font-medium text-white truncate">
-                        {userInfo.name}
-                      </p>
-                      <div className="flex items-center text-xs text-gray-400">
-                        <User className="h-3 w-3 mr-1" />
-                        <span className="truncate">
-                          {userInfo.regno || "No Reg. No."}
-                        </span>
-                      </div>
-                      <div className="flex items-center text-xs text-gray-400">
-                        <CalendarDays className="h-3 w-3 mr-1" />
-                        <span className="truncate">
-                          {userInfo.branch || "No Branch"}
-                        </span>
-                      </div>
+              {/* Attendance Status */}
+              <div className="w-full mb-4 p-3 rounded-lg bg-gray-900/50 border border-gray-800">
+                <h3 className="text-sm font-medium text-white mb-2">
+                  Attendance Status
+                </h3>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="text-gray-400">Last Check-in:</div>
+                  <div
+                    className={`text-${
+                      attendanceStatus.lastCheckIn ? "green" : "gray"
+                    }-400`}
+                  >
+                    {formatAttendanceTime(attendanceStatus.lastCheckIn)}
+                  </div>
+
+                  <div className="text-gray-400">Last Check-out:</div>
+                  <div
+                    className={`text-${
+                      attendanceStatus.lastCheckOut ? "blue" : "gray"
+                    }-400`}
+                  >
+                    {formatAttendanceTime(attendanceStatus.lastCheckOut)}
+                  </div>
+
+                  <div className="text-gray-400">Last Action:</div>
+                  <div>
+                    {attendanceStatus.lastAction ? (
+                      <Badge
+                        variant="outline"
+                        className={
+                          attendanceStatus.lastAction === "check-in"
+                            ? "bg-green-900/20 text-green-400 border-green-500/30"
+                            : "bg-blue-900/20 text-blue-400 border-blue-500/30"
+                        }
+                      >
+                        {attendanceStatus.lastAction === "check-in"
+                          ? "Check-in"
+                          : "Check-out"}
+                      </Badge>
+                    ) : (
+                      <span className="text-gray-400">None</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Scanner */}
+              <div className="w-full mb-4">
+                <div className="relative overflow-hidden rounded-lg border border-gray-700 aspect-video">
+                  {scannerActive ? (
+                    <Scanner
+                      onScan={(result) => handleScan(result)}
+                      onError={(error) => {
+                        console.error("Scanner error:", error);
+                        toast.error("Scanner error. Please try again.");
+                        setScannerActive(false);
+                        setTimeout(() => setScannerActive(true), 1000);
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                      {scannerLoading ? (
+                        <div className="flex flex-col items-center">
+                          <Loader2 className="h-8 w-8 animate-spin text-purple-500 mb-2" />
+                          <p className="text-gray-400 text-sm">
+                            Processing scan...
+                          </p>
+                        </div>
+                      ) : (
+                        <Button
+                          onClick={() => setScannerActive(true)}
+                          className="bg-purple-600 hover:bg-purple-700"
+                        >
+                          Start Scanner
+                        </Button>
+                      )}
                     </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* QR refresh progress */}
-              <motion.div
-                className="w-full mb-2"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2, duration: 0.5 }}
-              >
-                <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>QR Refresh</span>
-                  <span>Refreshed: {refreshCount} times</span>
+                  )}
                 </div>
-                <Progress value={qrRefreshProgress()} className="h-1" />
-              </motion.div>
+              </div>
 
-              <motion.div
-                className={`bg-white p-4 rounded-lg mb-4 transition-all ${
-                  isPulsing
-                    ? "scale-105 shadow-lg shadow-purple-500/20"
-                    : "scale-100"
-                }`}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3, duration: 0.5 }}
-              >
-                {qrLoading ? (
-                  <div className="w-48 h-48 flex items-center justify-center">
-                    <Loader2 className="h-12 w-12 animate-spin text-purple-500" />
-                  </div>
-                ) : qrCode ? (
-                  <QRCodeSVG
-                    value={qrCode}
-                    size={192}
-                    level="H"
-                    includeMargin={true}
-                    fgColor="#6a0dad"
-                  />
-                ) : (
-                  <div className="w-48 h-48 flex items-center justify-center">
-                    <AlertTriangle className="h-12 w-12 text-yellow-500" />
-                  </div>
-                )}
-              </motion.div>
+              <Alert className="bg-gray-900/40 border-purple-500/30 mb-4">
+                <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                <AlertTitle className="text-white">Important</AlertTitle>
+                <AlertDescription className="text-gray-400">
+                  Scan the QR code displayed by your instructor. Make sure to
+                  scan both check-in and check-out codes to record full
+                  attendance.
+                </AlertDescription>
+              </Alert>
 
-              <motion.div
-                className="w-full space-y-4"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4, duration: 0.5 }}
-              >
-                <Alert className="bg-gray-900/40 border-purple-500/30">
-                  <CheckCircle2 className="h-4 w-4 text-purple-500" />
-                  <AlertTitle className="text-white">
-                    This code changes every 2 seconds
-                  </AlertTitle>
-                  <AlertDescription className="text-gray-400">
-                    Keep this page open and show the QR code to your instructor
-                    to mark attendance.
-                  </AlertDescription>
-                </Alert>
-
-                <div className="flex justify-center space-x-2">
-                  <Button
-                    variant="outline"
-                    className="border-red-500/30 text-red-500 hover:bg-red-950/30 hover:text-red-400"
-                    onClick={handleLogout}
-                  >
-                    <LogOut className="h-4 w-4 mr-2" />
-                    End Session
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="border-gray-700 text-gray-400 hover:bg-gray-800"
-                    onClick={() => fetchQrCode()}
-                  >
-                    <Clipboard className="h-4 w-4 mr-2" />
-                    Refresh QR
-                  </Button>
-                </div>
-              </motion.div>
+              <div className="flex w-full space-x-2">
+                <Button
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                  onClick={() => setScannerActive(true)}
+                  disabled={scannerActive || scannerLoading}
+                >
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Check In
+                </Button>
+                <Button
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  onClick={() => setScannerActive(true)}
+                  disabled={scannerActive || scannerLoading}
+                >
+                  <UserX className="h-4 w-4 mr-2" />
+                  Check Out
+                </Button>
+              </div>
             </CardContent>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5, duration: 0.5 }}
-            >
-              <CardFooter>
-                <p className="text-xs text-gray-500 text-center w-full">
-                  Session expires in{" "}
-                  {timeLeft !== null ? formatTime(timeLeft) : "Loading..."}. Do
-                  not close this page or log out until your attendance is
-                  marked.
-                </p>
-              </CardFooter>
-            </motion.div>
+            <CardFooter className="text-center text-xs text-gray-500">
+              <p>
+                Connected as {email}. Your attendance session is locked to this
+                device.
+              </p>
+            </CardFooter>
           </Card>
         )}
       </motion.div>

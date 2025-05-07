@@ -28,12 +28,16 @@ const AttendanceSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['present', 'absent', 'late', 'half-day'],
+        enum: ['present', 'half-day', 'absent'],
         default: 'present'
+    },
+    lastAction: {
+        type: String,
+        enum: ['check-in', 'check-out'],
+        default: 'check-in'
     }
 }, { timestamps: true });
 
-// Create compound index on email and date to ensure one attendance record per student per day
-AttendanceSchema.index({ email: 1, date: 1 }, { unique: true });
+AttendanceSchema.index({ email: 1, date: 1 });
 
 export default mongoose.models.Attendance || mongoose.model("Attendance", AttendanceSchema);
