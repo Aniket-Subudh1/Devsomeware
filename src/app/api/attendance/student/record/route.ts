@@ -182,10 +182,6 @@ export async function POST(req: NextRequest) {
       const durationMinutes = Math.round((checkOutTime - checkInTime) / 60000);
       attendanceRecord.duration = durationMinutes;
       
-      // Update status based on duration (example: 4 hours = 240 minutes for full day)
-      if (durationMinutes < 240) {
-        attendanceRecord.status = 'half-day';
-      }
     }
     
     // Save attendance record

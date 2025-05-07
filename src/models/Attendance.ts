@@ -23,7 +23,7 @@ const AttendanceSchema = new mongoose.Schema({
         required: false
     },
     duration: {
-        type: Number, // in minutes
+        type: Number, 
         required: false
     },
     status: {

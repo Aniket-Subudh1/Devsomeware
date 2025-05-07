@@ -158,7 +158,8 @@ export default function AttendanceAdminDashboard() {
   const [currentView, setCurrentView] = useState<"day" | "week" | "month">(
     "day"
   );
-  const [selectedStudent, setSelectedStudent] = useState<string>("");
+  const ALL_STUDENTS_VALUE = 'ALL_STUDENTS';
+  const [selectedStudent, setSelectedStudent] = useState<string>(ALL_STUDENTS_VALUE);
 
   // Authenticate admin
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -198,6 +199,8 @@ export default function AttendanceAdminDashboard() {
       setLoading(false);
     }
   };
+  
+
 
   // Fetch attendance data
   const fetchAttendanceData = async () => {
@@ -241,6 +244,7 @@ export default function AttendanceAdminDashboard() {
         );
       }
 
+      
       const data = await response.json();
 
       if (data.success) {
@@ -348,7 +352,7 @@ export default function AttendanceAdminDashboard() {
 
     let filtered = [...attendanceRecords];
 
-    // Apply date range filter
+   
     if (dateRange.from) {
       const fromDate = new Date(dateRange.from);
       fromDate.setHours(0, 0, 0, 0);
@@ -390,8 +394,7 @@ export default function AttendanceAdminDashboard() {
       });
     }
 
-    // Apply student filter
-    if (selectedStudent) {
+    if (selectedStudent && selectedStudent !== ALL_STUDENTS_VALUE) {
       filtered = filtered.filter(
         (record) =>
           record.testUserId === selectedStudent ||
@@ -457,10 +460,9 @@ export default function AttendanceAdminDashboard() {
     toast.info(
       "Exporting to Excel... This would trigger the Excel export functionality"
     );
-    // This would typically use a library like exceljs or xlsx to create and download an Excel file
   };
 
-  // Check for existing authentication on component mount
+  
   useEffect(() => {
     const isAuthenticated = sessionStorage.getItem("adminAuthenticated");
     const storedPassword = sessionStorage.getItem("adminPassword");
@@ -781,19 +783,21 @@ export default function AttendanceAdminDashboard() {
                     </div>
 
                     <Select
-                      value={statusFilter}
-                      onValueChange={setStatusFilter}
-                    >
-                      <SelectTrigger className="w-[180px] bg-gray-900 border-gray-700 text-white">
-                        <SelectValue placeholder="Status" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-900 border-gray-700 text-white">
-                        <SelectItem value="all">All Statuses</SelectItem>
-                        <SelectItem value="present">Present</SelectItem>
-                        <SelectItem value="half-day">Partial</SelectItem>
-                        <SelectItem value="absent">Absent</SelectItem>
-                      </SelectContent>
-                    </Select>
+    value={selectedStudent}
+    onValueChange={setSelectedStudent}
+  >
+    <SelectTrigger className="w-full md:w-[300px] bg-gray-900 border-gray-700 text-white">
+      <SelectValue placeholder="Select Student" />
+    </SelectTrigger>
+    <SelectContent className="bg-gray-900 border-gray-700 text-white max-h-[300px]">
+      <SelectItem value={ALL_STUDENTS_VALUE}>All Students</SelectItem>
+      {students.map((student) => (
+        <SelectItem key={student._id} value={student._id}>
+          {student.name} ({student.regno || student.email})
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
 
                     <Popover>
                       <PopoverTrigger asChild>
