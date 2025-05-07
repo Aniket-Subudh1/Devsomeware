@@ -3,218 +3,315 @@ import ConnectDb from "@/middleware/connectDb";
 import Attendance from "@/models/Attendance";
 import TestUsers from "@/models/TestUsers";
 import StudentSession from "@/models/StudentSession";
+import jwt from "jsonwebtoken";
 
-export async function GET(req: NextRequest) {
+interface DecodedToken {
+  email: string;
+  id: string;
+}
+
+export async function POST(req: NextRequest) {
   try {
-    const adminPassword = req.nextUrl.searchParams.get('password');
-    const startDate = req.nextUrl.searchParams.get('startDate');
-    const endDate = req.nextUrl.searchParams.get('endDate');
-    const studentId = req.nextUrl.searchParams.get('studentId');
-    const status = req.nextUrl.searchParams.get('status');
+    await ConnectDb();
     
-    // Verify admin password - Make sure to check against your actual environment variable
-    // Testing output to help debug
-    console.log("Admin password provided:", adminPassword ? "Yes" : "No");
-    
-    // Use a simple default password for testing if environment variable isn't set
-    const actualAdminPwd = process.env.ADMIN_PASSWORD || "admin123";
-    console.log("Environment variable exists:", process.env.ADMIN_PASSWORD ? "Yes" : "No");
-    
-    if (!adminPassword || adminPassword !== actualAdminPwd) {
-      console.log("Password validation failed");
+    // First, safely parse the request body
+    let data;
+    try {
+      const bodyText = await req.text();
+      if (!bodyText) {
+        return NextResponse.json({
+          success: false,
+          message: "Empty request body"
+        }, { status: 400 });
+      }
+      data = JSON.parse(bodyText);
+    } catch (error) {
+      console.error("Error parsing request body:", error);
       return NextResponse.json({
         success: false,
-        message: "Invalid admin password"
+        message: "Invalid request format"
+      }, { status: 400 });
+    }
+    
+    const { token, qrData, email, deviceId, type } = data || {};
+    
+    // Validate inputs
+    if (!token || !qrData || !email || !deviceId || !type) {
+      return NextResponse.json({
+        success: false,
+        message: "Missing required fields"
+      }, { status: 400 });
+    }
+    
+    // Parse QR data
+    let qrPayload;
+    try {
+      qrPayload = JSON.parse(qrData);
+    } catch (error) {
+      return NextResponse.json({
+        success: false,
+        message: "Invalid QR code format"
+      }, { status: 400 });
+    }
+    
+    // Verify QR type
+    if (qrPayload.type !== 'check-in' && qrPayload.type !== 'check-out') {
+      return NextResponse.json({
+        success: false,
+        message: "Invalid QR type. Must be 'check-in' or 'check-out'"
+      }, { status: 400 });
+    }
+    
+    // Verify QR timestamp (within last 30 seconds)
+    const currentTime = Math.floor(Date.now() / 1000);
+    if (currentTime - qrPayload.timestamp > 30) {
+      return NextResponse.json({
+        success: false,
+        message: "QR code has expired. Please scan a fresh code."
+      }, { status: 400 });
+    }
+    
+    // Verify signature if needed
+    const adminSignature = process.env.NEXT_PUBLIC_ADMIN_SIGNATURE || 'default-signature';
+    if (qrPayload.adminSignature !== adminSignature) {
+      return NextResponse.json({
+        success: false,
+        message: "Invalid QR code signature"
+      }, { status: 400 });
+    }
+    
+    // Verify token and get student info
+    let decoded: DecodedToken;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET as string) as DecodedToken;
+    } catch (error) {
+      return NextResponse.json({
+        success: false,
+        message: "Invalid or expired token"
       }, { status: 401 });
+    }
+    
+    // Verify that the email matches the token
+    if (decoded.email !== email) {
+      return NextResponse.json({
+        success: false,
+        message: "Token email mismatch"
+      }, { status: 401 });
+    }
+    
+    // Check if student exists
+    const student = await TestUsers.findOne({ email }).lean() as { _id: string; [key: string]: any } | null;
+    if (!student) {
+      return NextResponse.json({
+        success: false,
+        message: "Student not found"
+      }, { status: 404 });
+    }
+    
+    // Verify session
+    const session = await StudentSession.findOne({
+      email,
+      isActive: true,
+      deviceId
+    }).lean();
+    
+    if (!session) {
+      return NextResponse.json({
+        success: false,
+        message: "No active session found for this device"
+      }, { status: 401 });
+    }
+    
+    // Determine the current date (reset to start of day)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Look for existing attendance record for today
+    let attendanceRecord = await Attendance.findOne({
+      email,
+      date: {
+        $gte: today,
+        $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000)
+      }
+    }).sort({ createdAt: -1 });
+    
+    const now = new Date();
+    
+    if (qrPayload.type === 'check-in') {
+      // Handle check-in
+      if (!attendanceRecord) {
+        // Create new attendance record
+        attendanceRecord = new Attendance({
+          email,
+          testUserId: student._id,
+          date: today,
+          checkInTime: now,
+          status: 'present',
+          lastAction: 'check-in'
+        });
+      } else if (attendanceRecord.lastAction === 'check-out') {
+        // Update existing record with new check-in (after a check-out)
+        attendanceRecord.checkInTime = now;
+        attendanceRecord.lastAction = 'check-in';
+      } else {
+        // Already checked in
+        return NextResponse.json({
+          success: true,
+          message: "You are already checked in",
+          lastCheckIn: attendanceRecord.checkInTime,
+          lastCheckOut: attendanceRecord.checkOutTime,
+          lastAction: attendanceRecord.lastAction
+        });
+      }
+    } else if (qrPayload.type === 'check-out') {
+      // Handle check-out
+      if (!attendanceRecord || attendanceRecord.lastAction === 'check-out') {
+        return NextResponse.json({
+          success: false,
+          message: "You need to check in first"
+        }, { status: 400 });
+      }
+      
+      // Update record with check-out info
+      attendanceRecord.checkOutTime = now;
+      attendanceRecord.lastAction = 'check-out';
+      
+      // Calculate duration in minutes
+      const checkInTime = new Date(attendanceRecord.checkInTime).getTime();
+      const checkOutTime = now.getTime();
+      const durationMinutes = Math.round((checkOutTime - checkInTime) / 60000);
+      attendanceRecord.duration = durationMinutes;
+      
+      // Update status based on duration (example: 4 hours = 240 minutes for full day)
+      if (durationMinutes < 240) {
+        attendanceRecord.status = 'half-day';
+      }
+    }
+    
+    // Save attendance record
+    await attendanceRecord.save();
+    
+    // Update session
+    await StudentSession.findOneAndUpdate(
+      { email, isActive: true },
+      {
+        lastActive: now,
+        $push: {
+          attendanceHistory: {
+            date: today,
+            checkInTime: attendanceRecord.checkInTime,
+            checkOutTime: attendanceRecord.checkOutTime,
+            duration: attendanceRecord.duration,
+            status: attendanceRecord.status
+          }
+        },
+        $inc: { totalAttendance: qrPayload.type === 'check-out' ? 1 : 0 }
+      }
+    );
+    
+    return NextResponse.json({
+      success: true,
+      message: `${qrPayload.type === 'check-in' ? 'Check-in' : 'Check-out'} recorded successfully`,
+      lastCheckIn: attendanceRecord.checkInTime,
+      lastCheckOut: attendanceRecord.checkOutTime,
+      lastAction: attendanceRecord.lastAction
+    });
+  } catch (error) {
+    console.error("Error recording attendance:", error);
+    return NextResponse.json({
+      success: false,
+      message: "Internal server error"
+    }, { status: 500 });
+  }
+}
+
+// Add a helper verify endpoint
+export async function GET(req: NextRequest) {
+  try {
+    const token = req.nextUrl.searchParams.get('token');
+    const email = req.nextUrl.searchParams.get('email');
+    const deviceId = req.nextUrl.searchParams.get('deviceId');
+    
+    if (!token || !email || !deviceId) {
+      return NextResponse.json({
+        success: false,
+        message: "Missing required parameters"
+      }, { status: 400 });
     }
     
     await ConnectDb();
     
-    // Construct the query filter
-    const filter: any = {};
-    
-    if (startDate) {
-      const parsedStartDate = new Date(startDate);
-      parsedStartDate.setHours(0, 0, 0, 0);
-      filter.date = { $gte: parsedStartDate };
-    }
-    
-    if (endDate) {
-      const parsedEndDate = new Date(endDate);
-      parsedEndDate.setHours(23, 59, 59, 999);
-      
-      if (filter.date) {
-        filter.date.$lte = parsedEndDate;
-      } else {
-        filter.date = { $lte: parsedEndDate };
-      }
-    }
-    
-    if (studentId) {
-      filter.testUserId = studentId;
-    }
-    
-    if (status && status !== 'all') {
-      filter.status = status;
-    }
-    
-    // Get all students - handle case where TestUsers might not exist yet
-    let students = [];
+    // Verify token
+    let decoded: DecodedToken;
     try {
-      students = await TestUsers.find({}).lean();
+      decoded = jwt.verify(token, process.env.JWT_SECRET as string) as DecodedToken;
     } catch (error) {
-      console.error("Error fetching students:", error);
+      return NextResponse.json({
+        success: false,
+        message: "Invalid or expired token"
+      }, { status: 401 });
     }
     
-    // Fetch attendance records with filters - handle case where Attendance might not exist yet
-    let attendanceRecords = [];
-    try {
-      attendanceRecords = await Attendance.find(filter).sort({ date: -1 }).lean();
-    } catch (error) {
-      console.error("Error fetching attendance records:", error);
+    // Verify session
+    const session = await StudentSession.findOne({
+      email,
+      isActive: true,
+      deviceId
+    }).lean();
+    
+    if (!session) {
+      return NextResponse.json({
+        success: false,
+        message: "No active session found for this device"
+      }, { status: 401 });
     }
     
-    // Populate student data for each record
-    const populatedRecords = attendanceRecords.map((record) => {
-      const student = students.find(s => s._id.toString() === record.testUserId?.toString());
-      return {
-        ...record,
-        student: student || null
-      };
-    });
+    // Get student info
+    const student = await TestUsers.findById(decoded.id).lean();
     
-    // Get current active student sessions
-    let activeSessions = [];
-    try {
-      activeSessions = await StudentSession.find({ isActive: true }).lean();
-    } catch (error) {
-      console.error("Error fetching active sessions:", error);
+    if (!student) {
+      return NextResponse.json({
+        success: false,
+        message: "Student not found"
+      }, { status: 404 });
     }
     
-    // Calculate statistics
+    // Get today's attendance
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    const todayRecords = attendanceRecords.filter(r => {
-      const recordDate = new Date(r.date);
-      return recordDate >= today && recordDate < tomorrow;
-    });
-    
-    const presentToday = todayRecords.filter(r => r.status === 'present').length;
-    const partialToday = todayRecords.filter(r => r.status === 'half-day').length;
-    const checkInsToday = todayRecords.filter(r => r.lastAction === 'check-in').length;
-    const checkOutsToday = todayRecords.filter(r => r.lastAction === 'check-out').length;
-    
-    // Calculate attendance records for the week
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay()); // Sunday of current week
-    
-    const weeklyData = [];
-    for (let i = 0; i < 7; i++) {
-      const day = new Date(weekStart);
-      day.setDate(weekStart.getDate() + i);
-      
-      const nextDay = new Date(day);
-      nextDay.setDate(day.getDate() + 1);
-      
-      const dayRecords = attendanceRecords.filter(r => {
-        const recordDate = new Date(r.date);
-        return recordDate >= day && recordDate < nextDay;
-      });
-      
-      const presentCount = dayRecords.filter(r => r.status === 'present').length;
-      weeklyData.push(presentCount);
-    }
-    
-    // Calculate monthly data - get the past 30 days
-    const monthLabels = [];
-    const presentData = [];
-    const absentData = [];
-    const partialData = [];
-    
-    for (let i = 29; i >= 0; i--) {
-      const day = new Date(today);
-      day.setDate(today.getDate() - i);
-      monthLabels.push(day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-      
-      const nextDay = new Date(day);
-      nextDay.setDate(day.getDate() + 1);
-      
-      const dayRecords = attendanceRecords.filter(r => {
-        const recordDate = new Date(r.date);
-        return recordDate >= day && recordDate < nextDay;
-      });
-      
-      const presentCount = dayRecords.filter(r => r.status === 'present').length;
-      const partialCount = dayRecords.filter(r => r.status === 'half-day').length;
-      const absentCount = students.length - (presentCount + partialCount);
-      
-      presentData.push(presentCount);
-      partialData.push(partialCount);
-      absentData.push(Math.max(0, absentCount)); // Ensure we don't get negative values
-    }
-    
-    // Calculate the average duration for today's records
-    const recordsWithDuration = todayRecords.filter(r => r.duration);
-    const avgDuration = recordsWithDuration.length > 0 
-      ? Math.round(recordsWithDuration.reduce((sum, r) => sum + (r.duration || 0), 0) / recordsWithDuration.length) 
-      : 0;
-    
-    const stats = {
-      totalStudents: students.length,
-      presentToday,
-      absentToday: students.length - (presentToday + partialToday),
-      partialToday,
-      checkInsToday,
-      checkOutsToday,
-      avgDuration,
-      weeklyAttendance: weeklyData,
-      monthlyAttendance: {
-        labels: monthLabels,
-        present: presentData,
-        absent: absentData,
-        partial: partialData
-      },
-      activeSessions: activeSessions.length
-    };
+    const attendanceRecord = await Attendance.findOne({
+      email,
+      date: {
+        $gte: today,
+        $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000)
+      }
+    }).sort({ createdAt: -1 }).lean();
     
     return NextResponse.json({
       success: true,
-      records: populatedRecords,
-      students,
-      stats
+      student,
+      lastCheckIn: Array.isArray(attendanceRecord) ? null : attendanceRecord?.checkInTime || null,
+      lastCheckOut: Array.isArray(attendanceRecord) ? null : attendanceRecord?.checkOutTime || null,
+      lastAction: Array.isArray(attendanceRecord) ? null : attendanceRecord?.lastAction || null
     });
-    
   } catch (error) {
-    console.error("Error fetching attendance records:", error);
+    console.error("Error verifying session:", error);
     return NextResponse.json({
       success: false,
-      message: "Error fetching attendance records",
-      records: [],
-      students: [],
-      stats: {
-        totalStudents: 0,
-        presentToday: 0,
-        absentToday: 0,
-        partialToday: 0,
-        checkInsToday: 0,
-        checkOutsToday: 0,
-        avgDuration: 0,
-        weeklyAttendance: [0, 0, 0, 0, 0, 0, 0],
-        monthlyAttendance: {
-          labels: Array.from({ length: 30 }, (_, i) => {
-            const date = new Date();
-            date.setDate(date.getDate() - (29 - i));
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          }),
-          present: Array(30).fill(0),
-          absent: Array(30).fill(0),
-          partial: Array(30).fill(0)
-        }
-      }
+      message: "Internal server error"
     }, { status: 500 });
   }
+}
+
+// Handle OPTIONS requests for CORS support
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }

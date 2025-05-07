@@ -43,6 +43,35 @@ export default function StudentScanner() {
   });
   const [deviceId, setDeviceId] = useState("");
 
+  // Store credentials in both cookies and localStorage
+  const storeCredentials = (token: string, email: string, deviceId: string) => {
+    // Store in cookies with expiry for better security
+    document.cookie = `studentAttendanceToken=${token}; max-age=86400; path=/`;
+    document.cookie = `studentAttendanceEmail=${email}; max-age=86400; path=/`;
+    document.cookie = `studentAttendanceDeviceId=${deviceId}; max-age=86400; path=/`;
+    
+    // Also store in localStorage as a backup
+    localStorage.setItem("studentAttendanceToken", token);
+    localStorage.setItem("studentAttendanceEmail", email);
+    localStorage.setItem("studentAttendanceDeviceId", deviceId);
+  };
+
+  // Retrieve credentials from cookies with fallback to localStorage
+  const getCredentials = () => {
+    const getCookie = (name: string) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+      return null;
+    };
+    
+    return {
+      token: getCookie("studentAttendanceToken") || localStorage.getItem("studentAttendanceToken"),
+      email: getCookie("studentAttendanceEmail") || localStorage.getItem("studentAttendanceEmail"),
+      deviceId: getCookie("studentAttendanceDeviceId") || localStorage.getItem("studentAttendanceDeviceId")
+    };
+  };
+
   // Login with student email
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,7 +99,20 @@ export default function StudentScanner() {
         }),
       });
 
-      const data = await response.json();
+      // Check if response is ok before trying to parse JSON
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      // Check if response has content before parsing JSON
+      const responseText = await response.text();
+      
+      if (!responseText) {
+        throw new Error("Empty response received from server");
+      }
+      
+      // Now parse the JSON from the text response
+      const data = JSON.parse(responseText);
 
       if (data.success) {
         setSessionToken(data.token);
@@ -81,10 +123,8 @@ export default function StudentScanner() {
           lastAction: data.lastAction,
         });
 
-        // Store in localStorage to persist the session
-        localStorage.setItem("studentAttendanceToken", data.token);
-        localStorage.setItem("studentAttendanceEmail", email);
-        localStorage.setItem("studentAttendanceDeviceId", deviceFingerprint);
+        // Store credentials in cookies and localStorage
+        storeCredentials(data.token, email, deviceFingerprint);
 
         toast.success("Login successful");
       } else {
@@ -140,7 +180,20 @@ export default function StudentScanner() {
         }),
       });
 
-      const data = await response.json();
+      // Check if response is ok before trying to parse JSON
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      // Check if response has content before parsing JSON
+      const responseText = await response.text();
+      
+      if (!responseText) {
+        throw new Error("Empty response received from server");
+      }
+      
+      // Now parse the JSON from the text response
+      const data = JSON.parse(responseText);
 
       if (data.success) {
         // Update attendance status
@@ -206,14 +259,12 @@ export default function StudentScanner() {
 
   // Attempt to restore session on component mount
   useEffect(() => {
-    const storedToken = localStorage.getItem("studentAttendanceToken");
-    const storedEmail = localStorage.getItem("studentAttendanceEmail");
-    const storedDeviceId = localStorage.getItem("studentAttendanceDeviceId");
+    const credentials = getCredentials();
 
-    if (storedToken && storedEmail && storedDeviceId) {
-      setSessionToken(storedToken);
-      setEmail(storedEmail);
-      setDeviceId(storedDeviceId);
+    if (credentials.token && credentials.email && credentials.deviceId) {
+      setSessionToken(credentials.token);
+      setEmail(credentials.email);
+      setDeviceId(credentials.deviceId);
 
       // Verify the session is still valid and get latest status
       const verifySession = async () => {
@@ -226,13 +277,26 @@ export default function StudentScanner() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              token: storedToken,
-              email: storedEmail,
-              deviceId: storedDeviceId,
+              token: credentials.token,
+              email: credentials.email,
+              deviceId: credentials.deviceId,
             }),
           });
 
-          const data = await response.json();
+          // Check if response is ok before trying to parse JSON
+          if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+
+          // Check if response has content before parsing JSON
+          const responseText = await response.text();
+          
+          if (!responseText) {
+            throw new Error("Empty response received from server");
+          }
+          
+          // Now parse the JSON from the text response
+          const data = JSON.parse(responseText);
 
           if (data.success) {
             setStudentInfo(data.student);
@@ -242,10 +306,16 @@ export default function StudentScanner() {
               lastAction: data.lastAction,
             });
           } else {
-            // Session is invalid, clear local storage
+            // Session is invalid, clear local storage and cookies
             localStorage.removeItem("studentAttendanceToken");
             localStorage.removeItem("studentAttendanceEmail");
             localStorage.removeItem("studentAttendanceDeviceId");
+            
+            // Clear cookies
+            document.cookie = "studentAttendanceToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            document.cookie = "studentAttendanceEmail=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            document.cookie = "studentAttendanceDeviceId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            
             setSessionToken("");
             toast.error("Your session has expired. Please login again.");
           }

@@ -26,7 +26,7 @@
     "@tsparticles/react": "^3.0.0",
     "@tsparticles/slim": "^3.8.0",
     "@types/three": "^0.172.0",
-    "@yudiel/react-qr-scanner": "^2.2.1",
+    "@yudiel/react-qr-scanner": "^2.3.1",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
     "axios": "^1.7.9",
