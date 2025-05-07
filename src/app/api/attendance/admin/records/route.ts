@@ -12,16 +12,7 @@ export async function GET(req: NextRequest) {
     const studentId = req.nextUrl.searchParams.get('studentId');
     const status = req.nextUrl.searchParams.get('status');
     
-    // Verify admin password - Make sure to check against your actual environment variable
-    // Testing output to help debug
-    console.log("Admin password provided:", adminPassword ? "Yes" : "No");
-    
-    // Use a simple default password for testing if environment variable isn't set
-    const actualAdminPwd = process.env.ADMIN_PASSWORD || "admin123";
-    console.log("Environment variable exists:", process.env.ADMIN_PASSWORD ? "Yes" : "No");
-    
-    if (!adminPassword || adminPassword !== actualAdminPwd) {
-      console.log("Password validation failed");
+    if (!adminPassword || adminPassword !== process.env.ADMIN_PASSWORD) {
       return NextResponse.json({
         success: false,
         message: "Invalid admin password"
@@ -30,8 +21,11 @@ export async function GET(req: NextRequest) {
     
     await ConnectDb();
     
-    // Construct the query filter
-    const filter: any = {};
+    const filter: {
+      date?: { $gte?: Date, $lte?: Date },
+      testUserId?: string,
+      status?: string
+    } = {};
     
     if (startDate) {
       const parsedStartDate = new Date(startDate);
@@ -58,40 +52,26 @@ export async function GET(req: NextRequest) {
       filter.status = status;
     }
     
-    // Get all students - handle case where TestUsers might not exist yet
-    let students = [];
-    try {
-      students = await TestUsers.find({}).lean();
-    } catch (error) {
-      console.error("Error fetching students:", error);
+    // Get all students
+    interface Student {
+      _id: string | { toString(): string };
+      [key: string]: unknown;
     }
     
-    // Fetch attendance records with filters - handle case where Attendance might not exist yet
-    let attendanceRecords = [];
-    try {
-      attendanceRecords = await Attendance.find(filter).sort({ date: -1 }).lean();
-    } catch (error) {
-      console.error("Error fetching attendance records:", error);
-    }
+    const students = await TestUsers.find({}).lean() as Student[];
     
-    // Populate student data for each record
-    const populatedRecords = attendanceRecords.map((record) => {
-      const student = students.find(s => s._id.toString() === record.testUserId?.toString());
+    const attendanceRecords = await Attendance.find(filter).sort({ date: -1 }).lean();
+    
+    const populatedRecords = await Promise.all(attendanceRecords.map(async (record) => {
+      const student = students.find(s => s._id.toString() === record.testUserId.toString());
       return {
         ...record,
-        student: student || null
+        student
       };
-    });
+    }));
     
-    // Get current active student sessions
-    let activeSessions = [];
-    try {
-      activeSessions = await StudentSession.find({ isActive: true }).lean();
-    } catch (error) {
-      console.error("Error fetching active sessions:", error);
-    }
+    const activeSessions = await StudentSession.find({ isActive: true }).lean();
     
-    // Calculate statistics
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
@@ -108,9 +88,8 @@ export async function GET(req: NextRequest) {
     const checkInsToday = todayRecords.filter(r => r.lastAction === 'check-in').length;
     const checkOutsToday = todayRecords.filter(r => r.lastAction === 'check-out').length;
     
-    // Calculate attendance records for the week
     const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay()); // Sunday of current week
+    weekStart.setDate(today.getDate() - today.getDay()); 
     
     const weeklyData = [];
     for (let i = 0; i < 7; i++) {
@@ -129,7 +108,7 @@ export async function GET(req: NextRequest) {
       weeklyData.push(presentCount);
     }
     
-    // Calculate monthly data - get the past 30 days
+   
     const monthLabels = [];
     const presentData = [];
     const absentData = [];
@@ -154,13 +133,12 @@ export async function GET(req: NextRequest) {
       
       presentData.push(presentCount);
       partialData.push(partialCount);
-      absentData.push(Math.max(0, absentCount)); // Ensure we don't get negative values
+      absentData.push(Math.max(0, absentCount)); 
     }
     
-    // Calculate the average duration for today's records
     const recordsWithDuration = todayRecords.filter(r => r.duration);
     const avgDuration = recordsWithDuration.length > 0 
-      ? Math.round(recordsWithDuration.reduce((sum, r) => sum + (r.duration || 0), 0) / recordsWithDuration.length) 
+      ? recordsWithDuration.reduce((sum, r) => sum + (r.duration || 0), 0) / recordsWithDuration.length 
       : 0;
     
     const stats = {
@@ -192,29 +170,7 @@ export async function GET(req: NextRequest) {
     console.error("Error fetching attendance records:", error);
     return NextResponse.json({
       success: false,
-      message: "Error fetching attendance records",
-      records: [],
-      students: [],
-      stats: {
-        totalStudents: 0,
-        presentToday: 0,
-        absentToday: 0,
-        partialToday: 0,
-        checkInsToday: 0,
-        checkOutsToday: 0,
-        avgDuration: 0,
-        weeklyAttendance: [0, 0, 0, 0, 0, 0, 0],
-        monthlyAttendance: {
-          labels: Array.from({ length: 30 }, (_, i) => {
-            const date = new Date();
-            date.setDate(date.getDate() - (29 - i));
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          }),
-          present: Array(30).fill(0),
-          absent: Array(30).fill(0),
-          partial: Array(30).fill(0)
-        }
-      }
+      message: "Error fetching attendance records"
     }, { status: 500 });
   }
 }
