@@ -45,10 +45,22 @@ export async function POST(req: NextRequest) {
     }
     
     if (session.deviceId !== deviceId) {
-      return NextResponse.json({
-        success: false,
-        message: "Session is bound to a different device"
-      }, { status: 403 });
+      // Check if device has been inactive for more than 12 hours
+      const lastActiveTime = new Date(session.lastActive).getTime();
+      const currentTime = new Date().getTime();
+      const hoursSinceLastActive = (currentTime - lastActiveTime) / (1000 * 60 * 60);
+      
+      if (hoursSinceLastActive > 12) {
+        // Update the session with the new device ID
+        session.deviceId = deviceId;
+        session.lastActive = new Date();
+        await session.save();
+      } else {
+        return NextResponse.json({
+          success: false,
+          message: "Session is bound to a different device"
+        }, { status: 403 });
+      }
     }
     
     // Fetch student info

@@ -14,7 +14,6 @@ export async function POST(req: NextRequest) {
   try {
     await ConnectDb();
     
-    // First, safely parse the request body
     let data;
     try {
       const bodyText = await req.text();
@@ -149,11 +148,16 @@ export async function POST(req: NextRequest) {
           status: 'present',
           lastAction: 'check-in'
         });
-      } else if (attendanceRecord.lastAction === 'check-out') {
-        // Update existing record with new check-in (after a check-out)
-        attendanceRecord.checkInTime = now;
-        attendanceRecord.lastAction = 'check-in';
-      } else {
+      } else if (attendanceRecord.checkInTime && attendanceRecord.checkOutTime) {
+        // Student has already completed attendance cycle for today
+        return NextResponse.json({
+          success: true,
+          message: "You have already completed your attendance for today",
+          lastCheckIn: attendanceRecord.checkInTime,
+          lastCheckOut: attendanceRecord.checkOutTime,
+          lastAction: 'complete'
+        });
+      } else if (attendanceRecord.lastAction === 'check-in') {
         // Already checked in
         return NextResponse.json({
           success: true,
@@ -162,14 +166,39 @@ export async function POST(req: NextRequest) {
           lastCheckOut: attendanceRecord.checkOutTime,
           lastAction: attendanceRecord.lastAction
         });
+      } else {
+        // Update existing record with new check-in (after a check-out)
+        attendanceRecord.checkInTime = now;
+        attendanceRecord.lastAction = 'check-in';
       }
     } else if (qrPayload.type === 'check-out') {
       // Handle check-out
-      if (!attendanceRecord || attendanceRecord.lastAction === 'check-out') {
+      if (!attendanceRecord || !attendanceRecord.checkInTime) {
         return NextResponse.json({
           success: false,
           message: "You need to check in first"
         }, { status: 400 });
+      }
+      
+      if (attendanceRecord.checkInTime && attendanceRecord.checkOutTime) {
+        // Student has already completed attendance cycle for today
+        return NextResponse.json({
+          success: true,
+          message: "You have already completed your attendance for today",
+          lastCheckIn: attendanceRecord.checkInTime,
+          lastCheckOut: attendanceRecord.checkOutTime,
+          lastAction: 'complete'
+        });
+      }
+      
+      if (attendanceRecord.lastAction === 'check-out') {
+        return NextResponse.json({
+          success: true,
+          message: "You have already checked out",
+          lastCheckIn: attendanceRecord.checkInTime,
+          lastCheckOut: attendanceRecord.checkOutTime,
+          lastAction: attendanceRecord.lastAction
+        });
       }
       
       // Update record with check-out info
@@ -181,7 +210,6 @@ export async function POST(req: NextRequest) {
       const checkOutTime = now.getTime();
       const durationMinutes = Math.round((checkOutTime - checkInTime) / 60000);
       attendanceRecord.duration = durationMinutes;
-      
     }
     
     // Save attendance record

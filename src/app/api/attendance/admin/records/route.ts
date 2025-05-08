@@ -83,10 +83,18 @@ export async function GET(req: NextRequest) {
       return recordDate >= today && recordDate < tomorrow;
     });
     
-    const presentToday = todayRecords.filter(r => r.status === 'present').length;
-    const partialToday = todayRecords.filter(r => r.status === 'half-day').length;
-    const checkInsToday = todayRecords.filter(r => r.lastAction === 'check-in').length;
-    const checkOutsToday = todayRecords.filter(r => r.lastAction === 'check-out').length;
+    // Count students who have checked in today
+    const uniqueStudentIdsToday = new Set(todayRecords.map(r => r.testUserId.toString()));
+    const presentToday = uniqueStudentIdsToday.size;
+    
+    // Count students who have partially attended (checked in but not out)
+    const partialToday = todayRecords.filter(r => 
+      r.checkInTime && (!r.checkOutTime || r.status === 'half-day')
+    ).length;
+    
+    // Properly count check-ins and check-outs
+    const checkInsToday = todayRecords.filter(r => r.checkInTime).length;
+    const checkOutsToday = todayRecords.filter(r => r.checkOutTime).length;
     
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - today.getDay()); 
@@ -104,11 +112,13 @@ export async function GET(req: NextRequest) {
         return recordDate >= day && recordDate < nextDay;
       });
       
-      const presentCount = dayRecords.filter(r => r.status === 'present').length;
+      // Count unique students who checked in
+      const uniqueStudentIds = new Set(dayRecords.map(r => r.testUserId.toString()));
+      const presentCount = uniqueStudentIds.size;
+      
       weeklyData.push(presentCount);
     }
     
-   
     const monthLabels = [];
     const presentData = [];
     const absentData = [];
@@ -127,16 +137,26 @@ export async function GET(req: NextRequest) {
         return recordDate >= day && recordDate < nextDay;
       });
       
-      const presentCount = dayRecords.filter(r => r.status === 'present').length;
-      const partialCount = dayRecords.filter(r => r.status === 'half-day').length;
-      const absentCount = students.length - (presentCount + partialCount);
+      // Count unique students for each day
+      const uniqueStudentIds = new Set(dayRecords.map(r => r.testUserId.toString()));
+      const uniqueFullAttendance = new Set(dayRecords
+        .filter(r => r.checkInTime && r.checkOutTime)
+        .map(r => r.testUserId.toString()));
+      const uniquePartialAttendance = new Set(dayRecords
+        .filter(r => r.checkInTime && !r.checkOutTime)
+        .map(r => r.testUserId.toString()));
+      
+      const presentCount = uniqueFullAttendance.size;
+      const partialCount = uniquePartialAttendance.size;
+      const absentCount = Math.max(0, students.length - (presentCount + partialCount));
       
       presentData.push(presentCount);
       partialData.push(partialCount);
-      absentData.push(Math.max(0, absentCount)); 
+      absentData.push(absentCount);
     }
     
-    const recordsWithDuration = todayRecords.filter(r => r.duration);
+    // Calculate average duration only for records that have both check-in and check-out
+    const recordsWithDuration = todayRecords.filter(r => r.duration && r.checkInTime && r.checkOutTime);
     const avgDuration = recordsWithDuration.length > 0 
       ? recordsWithDuration.reduce((sum, r) => sum + (r.duration || 0), 0) / recordsWithDuration.length 
       : 0;
@@ -144,7 +164,7 @@ export async function GET(req: NextRequest) {
     const stats = {
       totalStudents: students.length,
       presentToday,
-      absentToday: students.length - (presentToday + partialToday),
+      absentToday: Math.max(0, students.length - presentToday),
       partialToday,
       checkInsToday,
       checkOutsToday,

@@ -67,10 +67,37 @@ export async function GET(req: NextRequest) {
       }, { status: 401 });
     }
     
+    // Connect to db and get real stats
+    await import('@/middleware/connectDb').then(module => module.default());
+    const Attendance = (await import('@/models/Attendance')).default;
+    const TestUsers = (await import('@/models/TestUsers')).default;
+    const StudentSession = (await import('@/models/StudentSession')).default;
+    
+    // Get today's date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Get all attendance records for today
+    const todayAttendance = await Attendance.find({
+      date: {
+        $gte: today,
+        $lt: tomorrow
+      }
+    }).lean();
+    
+    // Count check-ins and check-outs properly
+    const todayCheckins = todayAttendance.filter(record => record.checkInTime).length;
+    const todayCheckouts = todayAttendance.filter(record => record.checkOutTime).length;
+    
+    // Count active sessions
+    const activeSessions = await StudentSession.find({ isActive: true }).lean();
+    
     const stats = {
-      todayCheckins: 12,
-      todayCheckouts: 8,
-      activeSessions: 15
+      todayCheckins,
+      todayCheckouts,
+      activeSessions: activeSessions.length
     };
     
     return NextResponse.json({

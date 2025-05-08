@@ -72,71 +72,77 @@ export default function StudentScanner() {
     };
   };
 
-  // Login with student email
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
 
-    if (!email) {
-      toast.error("Please enter your email");
-      return;
+const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (!email) {
+    toast.error("Please enter your email");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const deviceFingerprint = await generateDeviceFingerprint();
+    setDeviceId(deviceFingerprint);
+
+    const response = await fetch("/api/attendance/student/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        deviceId: deviceFingerprint,
+      }),
+    });
+
+    // Check if response is ok before trying to parse JSON
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage;
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.message || "Authentication failed";
+      } catch {
+        errorMessage = `Authentication failed (${response.status})`;
+      }
+      throw new Error(errorMessage);
     }
 
-    try {
-      setLoading(true);
+    // Check if response has content before parsing JSON
+    const responseText = await response.text();
+    
+    if (!responseText) {
+      throw new Error("Empty response received from server");
+    }
+    
+    const data = JSON.parse(responseText);
 
-      // Register the device ID (browser fingerprint) along with the email
-      const deviceFingerprint = await generateDeviceFingerprint();
-      setDeviceId(deviceFingerprint);
-
-      const response = await fetch("/api/attendance/student/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email,
-          deviceId: deviceFingerprint,
-        }),
+    if (data.success) {
+      setSessionToken(data.token);
+      setStudentInfo(data.student);
+      setAttendanceStatus({
+        lastCheckIn: data.lastCheckIn,
+        lastCheckOut: data.lastCheckOut,
+        lastAction: data.lastAction,
       });
 
-      // Check if response is ok before trying to parse JSON
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
+      storeCredentials(data.token, email, deviceFingerprint);
 
-      // Check if response has content before parsing JSON
-      const responseText = await response.text();
-      
-      if (!responseText) {
-        throw new Error("Empty response received from server");
-      }
-      
-      // Now parse the JSON from the text response
-      const data = JSON.parse(responseText);
-
-      if (data.success) {
-        setSessionToken(data.token);
-        setStudentInfo(data.student);
-        setAttendanceStatus({
-          lastCheckIn: data.lastCheckIn,
-          lastCheckOut: data.lastCheckOut,
-          lastAction: data.lastAction,
-        });
-
-        // Store credentials in cookies and localStorage
-        storeCredentials(data.token, email, deviceFingerprint);
-
-        toast.success("Login successful");
-      } else {
-        toast.error(data.message || "Login failed");
-      }
-    } catch (error) {
-      console.error("Error logging in:", error);
-      toast.error("An error occurred. Please try again.");
-    } finally {
-      setLoading(false);
+      toast.success(data.message || "Login successful");
+    } else {
+      toast.error(data.message || "Login failed");
     }
-  };
+  } catch (error) {
+    console.error("Error logging in:", error);
+    const errorMessage = error instanceof Error ? error.message : "An error occurred. Please try again.";
+    toast.error(errorMessage);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Handle QR code scan
   const handleScan = async (result: { rawValue: string }[]) => {

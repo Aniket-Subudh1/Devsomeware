@@ -40,14 +40,20 @@ export async function GET(req: NextRequest) {
       }
     }).lean();
     
-    // Count check-ins and check-outs
-    const todayCheckins = todayAttendance.filter(record => record.lastAction === 'check-in').length;
-    const todayCheckouts = todayAttendance.filter(record => record.lastAction === 'check-out').length;
+    // Count check-ins and check-outs - fixed to properly count
+    const todayCheckins = todayAttendance.filter(record => record.checkInTime).length;
+    const todayCheckouts = todayAttendance.filter(record => record.checkOutTime).length;
     
     // Get unique attendees today (students who checked in)
-    const uniqueAttendeesToday = new Set(todayAttendance.map(record => record.email)).size;
+    const uniqueAttendeeEmails = new Set(todayAttendance.map(record => record.email));
+    const uniqueAttendeesToday = uniqueAttendeeEmails.size;
     
-    // Calculate attendance rate
+    // Count students with complete attendance (both check-in and check-out)
+    const completeAttendance = todayAttendance.filter(
+      record => record.checkInTime && record.checkOutTime
+    ).length;
+    
+    // Calculate attendance rate based on unique attendees who checked in
     const attendanceRate = totalStudents > 0 
       ? Math.round((uniqueAttendeesToday / totalStudents) * 100) 
       : 0;
@@ -78,6 +84,7 @@ export async function GET(req: NextRequest) {
         return recordDate >= day && recordDate < nextDay;
       });
       
+      // Count unique students who at least checked in
       const uniqueAttendees = new Set(dayAttendance.map(record => record.email)).size;
       
       weeklyStats.push({
@@ -89,7 +96,7 @@ export async function GET(req: NextRequest) {
     
     // Get latest check-ins
     const latestCheckIns = await Attendance.find({
-      lastAction: 'check-in'
+      checkInTime: { $exists: true, $ne: null }
     })
     .sort({ checkInTime: -1 })
     .limit(5)
@@ -106,26 +113,28 @@ export async function GET(req: NextRequest) {
       })
     );
     
-    // Calculate average duration of attendance
-    const recordsWithDuration = todayAttendance.filter(record => record.duration);
+    // Calculate average duration of attendance (only for records with both check-in and check-out)
+    const recordsWithDuration = todayAttendance.filter(record => 
+      record.checkInTime && record.checkOutTime && record.duration
+    );
     const avgDuration = recordsWithDuration.length > 0
       ? Math.round(recordsWithDuration.reduce((sum, record) => sum + (record.duration || 0), 0) / recordsWithDuration.length)
       : 0;
     
     // In your API route
-const stats = {
-    todayCheckins: todayAttendance.filter(record => record.lastAction === 'check-in').length || 0,
-    todayCheckouts: todayAttendance.filter(record => record.lastAction === 'check-out').length || 0,
-    activeSessions: activeSessions.length || 0,
-    totalStudents: students.length || 0,
-    uniqueAttendees: uniqueAttendeesToday || 0,
-    attendanceRate: students.length > 0 
-      ? Math.round((uniqueAttendeesToday / students.length) * 100) 
-      : 0,
-    weeklyStats: weeklyStats || [],
-    latestCheckIns: latestCheckInsWithStudents || [],
-    avgDuration: avgDuration || 0
-  };
+    const stats = {
+      todayCheckins: todayCheckins,
+      todayCheckouts: todayCheckouts,
+      activeSessions: activeSessions.length || 0,
+      totalStudents: students.length || 0,
+      uniqueAttendees: uniqueAttendeesToday || 0,
+      attendanceRate: attendanceRate,
+      weeklyStats: weeklyStats || [],
+      latestCheckIns: latestCheckInsWithStudents || [],
+      avgDuration: avgDuration || 0,
+      completeAttendance: completeAttendance || 0
+    };
+    
     return NextResponse.json({
       success: true,
       stats
