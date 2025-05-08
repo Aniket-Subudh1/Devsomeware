@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import crypto from "crypto";
 
+
 export async function POST(req: NextRequest) {
   try {
     let data;
@@ -36,9 +37,12 @@ export async function POST(req: NextRequest) {
     
     const nonce = crypto.randomBytes(8).toString('hex');
     
+    const expiresAt = timestamp + 300;
+    
     const qrPayload = {
       type,
       timestamp,
+      expiresAt, 
       adminSignature,
       nonce
     };

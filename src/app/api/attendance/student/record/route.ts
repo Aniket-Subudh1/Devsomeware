@@ -34,7 +34,6 @@ export async function POST(req: NextRequest) {
     
     const { token, qrData, email, deviceId, type } = data || {};
     
-    // Validate inputs
     if (!token || !qrData || !email || !deviceId || !type) {
       return NextResponse.json({
         success: false,
@@ -42,7 +41,6 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
-    // Parse QR data
     let qrPayload;
     try {
       qrPayload = JSON.parse(qrData);
@@ -53,7 +51,6 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
-    // Verify QR type
     if (qrPayload.type !== 'check-in' && qrPayload.type !== 'check-out') {
       return NextResponse.json({
         success: false,
@@ -61,9 +58,13 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
-    // Verify QR timestamp (within last 30 seconds)
     const currentTime = Math.floor(Date.now() / 1000);
-    if (currentTime - qrPayload.timestamp > 30) {
+    
+    const isExpired = qrPayload.expiresAt 
+      ? currentTime > qrPayload.expiresAt 
+      : currentTime - qrPayload.timestamp > 300; 
+    
+    if (isExpired) {
       return NextResponse.json({
         success: false,
         message: "QR code has expired. Please scan a fresh code."
@@ -328,7 +329,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Handle OPTIONS requests for CORS support
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,

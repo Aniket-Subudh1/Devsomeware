@@ -408,16 +408,15 @@ export default function AdminQRGenerator() {
                 <CardContent className="flex flex-col items-center">
                   {/* Countdown display */}
                   <div className="mb-4 w-full">
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>QR Refresh Progress</span>
-                      <span>
-                        <Clock className="h-3 w-3 inline mr-1" />
-                        Next refresh in{" "}
-                        {Math.ceil((2 * (100 - progress)) / 100)} sec
-                      </span>
-                    </div>
-                    <Progress value={progress} className="h-1" />
-                  </div>
+  <div className="flex justify-between text-xs text-gray-500 mb-1">
+    <span>QR Refresh Progress</span>
+    <span>
+      <Clock className="h-3 w-3 inline mr-1" />
+      Expires in {Math.ceil((300 - (Date.now() - (qrData ? Date.now() : 0)) / 1000) / 60)} min
+    </span>
+  </div>
+  <Progress value={progress} className="h-1" />
+</div>
 
                   {/* QR Code */}
                   <div
@@ -447,16 +446,15 @@ export default function AdminQRGenerator() {
                   </div>
 
                   <div className="w-full space-y-4">
-                    <Alert className="bg-gray-900/40 border-purple-500/30">
-                      <Clock className="h-4 w-4 text-purple-500" />
-                      <AlertTitle className="text-white">
-                        Dynamic QR Code
-                      </AlertTitle>
-                      <AlertDescription className="text-gray-400">
-                        This code changes every 2 seconds for security. Students
-                        should scan it to record their attendance.
-                      </AlertDescription>
-                    </Alert>
+                  <Alert className="bg-gray-900/40 border-purple-500/30">
+  <Clock className="h-4 w-4 text-purple-500" />
+  <AlertTitle className="text-white">
+    Extended QR Code Validity
+  </AlertTitle>
+  <AlertDescription className="text-gray-400">
+    This code remains valid for 5 minutes for easier scanning. Students should scan it to record their attendance.
+  </AlertDescription>
+</Alert>
 
                     <div className="flex justify-center space-x-4">
                       <Button
