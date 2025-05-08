@@ -20,6 +20,13 @@ interface IAttendance {
   lastAction?: 'check-in' | 'check-out';
 }
 
+// Define an interface for MongoDB errors to safely check error codes
+interface MongoDBError extends Error {
+  code?: number;
+  keyPattern?: Record<string, number>;
+  keyValue?: Record<string, any>;
+}
+
 export async function POST(req: NextRequest) {
   try {
     await ConnectDb();
@@ -41,6 +48,7 @@ export async function POST(req: NextRequest) {
       }, { status: 404 });
     }
     
+    // Check if there's an existing session with special handling for duplicate key errors
     try {
       const existingSession = await StudentSession.findOne({ email });
       
@@ -189,8 +197,13 @@ export async function POST(req: NextRequest) {
           lastCheckOut: todayAttendance?.checkOutTime || null,
           lastAction: todayAttendance?.lastAction || null
         });
-      } catch (sessionError) {
+      } catch (error) {
+        // Type guard for MongoDB errors
+        const sessionError = error as MongoDBError;
+        
+        // If we still get a duplicate key error despite our precautions, try again with a direct approach
         if (sessionError.code === 11000) {
+          // Fetch the existing session again (it might have been created in a race condition)
           const retrySession = await StudentSession.findOne({ email });
           
           if (retrySession) {
@@ -236,8 +249,11 @@ export async function POST(req: NextRequest) {
       }
     } catch (error) {
       console.error("Session handling error:", error);
+      // Type guard for MongoDB errors
+      const mongoError = error as MongoDBError;
+      
       // For any other errors, we'll try a last-resort approach
-      if (error.code === 11000) {
+      if (mongoError.code === 11000) {
         try {
           // Try to delete the existing session and create a new one
           await StudentSession.deleteOne({ email });
