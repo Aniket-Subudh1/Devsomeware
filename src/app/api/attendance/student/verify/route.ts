@@ -14,7 +14,12 @@ export async function POST(req: NextRequest) {
   try {
     await ConnectDb();
     
-    // Safely parse the request
+    const headers = new Headers();
+    headers.append('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    headers.append('Pragma', 'no-cache');
+    headers.append('Expires', '0');
+    headers.append('Surrogate-Control', 'no-store');
+    
     let data;
     try {
       const bodyText = await req.text();
@@ -22,7 +27,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           success: false,
           message: "Empty request body"
-        }, { status: 400 });
+        }, { status: 400, headers });
       }
       data = JSON.parse(bodyText);
     } catch (error) {
@@ -30,7 +35,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: false,
         message: "Invalid request format"
-      }, { status: 400 });
+      }, { status: 400, headers });
     }
     
     const { token, email, deviceId } = data || {};
@@ -39,7 +44,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: false,
         message: "Missing required fields"
-      }, { status: 400 });
+      }, { status: 400, headers });
     }
     
     // Verify token
@@ -50,7 +55,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: false,
         message: "Invalid or expired token"
-      }, { status: 401 });
+      }, { status: 401, headers });
     }
     
     // Verify email matches token
@@ -58,7 +63,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: false,
         message: "Token email mismatch"
-      }, { status: 401 });
+      }, { status: 401, headers });
     }
     
     // Find active session
@@ -70,16 +75,28 @@ export async function POST(req: NextRequest) {
     if (!session) {
       return NextResponse.json({
         success: false,
-        message: "No active session found"
-      }, { status: 401 });
+        message: "No active session found. Please login again."
+      }, { status: 401, headers });
     }
     
     // Verify device ID
     if (session.deviceId !== deviceId) {
-      return NextResponse.json({
-        success: false,
-        message: "Session is bound to a different device"
-      }, { status: 403 });
+      // Add logic to handle device changes after inactivity
+      const lastActiveTime = new Date(session.lastActive).getTime();
+      const currentTime = new Date().getTime();
+      const hoursSinceLastActive = (currentTime - lastActiveTime) / (1000 * 60 * 60);
+      
+      if (hoursSinceLastActive > 12) {
+        // Update the session with the new device ID
+        session.deviceId = deviceId;
+        session.lastActive = new Date();
+        await session.save();
+      } else {
+        return NextResponse.json({
+          success: false,
+          message: "Session is bound to a different device. Please use the original device or wait 12 hours."
+        }, { status: 403, headers });
+      }
     }
    
     const student = await TestUsers.findById(session.studentId).lean();
@@ -88,7 +105,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: false,
         message: "Student not found"
-      }, { status: 404 });
+      }, { status: 404, headers });
     }
    
     const today = new Date();
@@ -118,24 +135,37 @@ export async function POST(req: NextRequest) {
       lastCheckIn: todayAttendance?.checkInTime || null,
       lastCheckOut: todayAttendance?.checkOutTime || null,
       lastAction: todayAttendance?.lastAction || null
-    });
+    }, { headers });
   } catch (error) {
     console.error("Error verifying student session:", error);
+    
+    // Add cache control headers to prevent browser caching
+    const headers = new Headers();
+    headers.append('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    headers.append('Pragma', 'no-cache');
+    headers.append('Expires', '0');
+    headers.append('Surrogate-Control', 'no-store');
+    
     return NextResponse.json({
       success: false,
       message: "Internal server error"
-    }, { status: 500 });
+    }, { status: 500, headers });
   }
 }
 
 
 export async function OPTIONS() {
+  const headers = new Headers();
+  headers.append('Access-Control-Allow-Origin', '*');
+  headers.append('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  headers.append('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  headers.append('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  headers.append('Pragma', 'no-cache');
+  headers.append('Expires', '0');
+  headers.append('Surrogate-Control', 'no-store');
+  
   return new NextResponse(null, {
     status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
+    headers,
   });
 }

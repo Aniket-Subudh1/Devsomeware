@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { Toaster, toast } from "sonner";
-import { Loader2, AlertTriangle, UserCheck, UserX } from "lucide-react";
+import { Loader2, AlertTriangle, UserCheck, UserX, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,9 @@ interface StudentInfo {
   name?: string;
   email?: string;
   id?: string;
+  campus?: string;
+  branch?: string;
+  regno?: string;
   [key: string]: string | number | boolean | undefined;
 }
 
@@ -42,21 +45,19 @@ export default function StudentScanner() {
     lastAction: null,
   });
   const [deviceId, setDeviceId] = useState("");
-
-  // Store credentials in both cookies and localStorage
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanSuccessTime, setScanSuccessTime] = useState<number | null>(null);
+  
   const storeCredentials = (token: string, email: string, deviceId: string) => {
-    // Store in cookies with expiry for better security
     document.cookie = `studentAttendanceToken=${token}; max-age=86400; path=/`;
     document.cookie = `studentAttendanceEmail=${email}; max-age=86400; path=/`;
     document.cookie = `studentAttendanceDeviceId=${deviceId}; max-age=86400; path=/`;
     
-    // Also store in localStorage as a backup
     localStorage.setItem("studentAttendanceToken", token);
     localStorage.setItem("studentAttendanceEmail", email);
     localStorage.setItem("studentAttendanceDeviceId", deviceId);
   };
 
-  // Retrieve credentials from cookies with fallback to localStorage
   const getCredentials = () => {
     const getCookie = (name: string) => {
       const value = `; ${document.cookie}`;
@@ -72,123 +73,54 @@ export default function StudentScanner() {
     };
   };
 
+  const handleRefreshScanner = () => {
+    setScannerActive(false);
+    setScanError(null);
+    setTimeout(() => {
+      setScannerActive(true);
+    }, 500);
+  };
 
-const handleLogin = async (e: React.FormEvent) => {
-  e.preventDefault();
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  if (!email) {
-    toast.error("Please enter your email");
-    return;
-  }
-
-  try {
-    setLoading(true);
-
-    const deviceFingerprint = await generateDeviceFingerprint();
-    setDeviceId(deviceFingerprint);
-
-    const response = await fetch("/api/attendance/student/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email,
-        deviceId: deviceFingerprint,
-      }),
-    });
-
-    // Check if response is ok before trying to parse JSON
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage;
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.message || "Authentication failed";
-      } catch {
-        errorMessage = `Authentication failed (${response.status})`;
-      }
-      throw new Error(errorMessage);
+    if (!email) {
+      toast.error("Please enter your email");
+      return;
     }
 
-    // Check if response has content before parsing JSON
-    const responseText = await response.text();
-    
-    if (!responseText) {
-      throw new Error("Empty response received from server");
-    }
-    
-    const data = JSON.parse(responseText);
-
-    if (data.success) {
-      setSessionToken(data.token);
-      setStudentInfo(data.student);
-      setAttendanceStatus({
-        lastCheckIn: data.lastCheckIn,
-        lastCheckOut: data.lastCheckOut,
-        lastAction: data.lastAction,
-      });
-
-      storeCredentials(data.token, email, deviceFingerprint);
-
-      toast.success(data.message || "Login successful");
-    } else {
-      toast.error(data.message || "Login failed");
-    }
-  } catch (error) {
-    console.error("Error logging in:", error);
-    const errorMessage = error instanceof Error ? error.message : "An error occurred. Please try again.";
-    toast.error(errorMessage);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  // Handle QR code scan
-  const handleScan = async (result: { rawValue: string }[]) => {
     try {
-      setScannerLoading(true);
-      setScannerActive(false);
+      setLoading(true);
 
-      const qrData = result[0].rawValue;
-      let qrPayload;
+      const deviceFingerprint = await generateDeviceFingerprint();
+      setDeviceId(deviceFingerprint);
 
-      try {
-        qrPayload = JSON.parse(qrData);
-      } catch {
-        toast.error("Invalid QR code format");
-        setScannerLoading(false);
-        setScannerActive(true);
-        return;
-      }
-
-      // Verify the QR code is recent (within last 5 seconds to allow scanning time)
-      const currentTime = Math.floor(Date.now() / 1000);
-      if (currentTime - qrPayload.timestamp > 5) {
-        toast.error("QR code has expired. Please scan a fresh code.");
-        setScannerLoading(false);
-        setScannerActive(true);
-        return;
-      }
-
-      // Send the scan to the server
-      const response = await fetch("/api/attendance/student/record", {
+      const timestamp = new Date().getTime();
+      
+      const response = await fetch(`/api/attendance/student/login?_t=${timestamp}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0"
         },
         body: JSON.stringify({
-          token: sessionToken,
-          qrData,
-          email: email,
-          deviceId: deviceId,
-          type: qrPayload.type, // check-in or check-out
+          email,
+          deviceId: deviceFingerprint,
         }),
       });
 
-      // Check if response is ok before trying to parse JSON
       if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
+        const errorText = await response.text();
+        let errorMessage;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || "Authentication failed";
+        } catch {
+          errorMessage = `Authentication failed (${response.status})`;
+        }
+        throw new Error(errorMessage);
       }
 
       // Check if response has content before parsing JSON
@@ -198,44 +130,129 @@ const handleLogin = async (e: React.FormEvent) => {
         throw new Error("Empty response received from server");
       }
       
-      // Now parse the JSON from the text response
       const data = JSON.parse(responseText);
 
       if (data.success) {
-        // Update attendance status
+        setSessionToken(data.token);
+        setStudentInfo(data.student);
+        setAttendanceStatus({
+          lastCheckIn: data.lastCheckIn,
+          lastCheckOut: data.lastCheckOut,
+          lastAction: data.lastAction,
+        });
+
+        storeCredentials(data.token, email, deviceFingerprint);
+
+        toast.success(data.message || "Login successful");
+      } else {
+        toast.error(data.message || "Login failed");
+      }
+    } catch (error) {
+      console.error("Error logging in:", error);
+      const errorMessage = error instanceof Error ? error.message : "An error occurred. Please try again.";
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleScan = async (result: { rawValue: string }[]) => {
+    try {
+    
+      if (scanSuccessTime && Date.now() - scanSuccessTime < 2000) {
+        return;
+      }
+      
+      setScannerLoading(true);
+      setScannerActive(false);
+      setScanError(null);
+
+      const qrData = result[0].rawValue;
+      let qrPayload;
+
+      try {
+        qrPayload = JSON.parse(qrData);
+      } catch {
+        setScanError("Invalid QR code format. Please try scanning again.");
+        toast.error("Invalid QR code format");
+        setScannerLoading(false);
+        setTimeout(() => setScannerActive(true), 1000);
+        return;
+      }
+
+      const timestamp = new Date().getTime();
+      
+      const response = await fetch(`/api/attendance/student/record?_t=${timestamp}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0"
+        },
+        body: JSON.stringify({
+          token: sessionToken,
+          qrData,
+          email: email,
+          deviceId: deviceId,
+          type: qrPayload.type, 
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || `HTTP error! Status: ${response.status}`;
+        } catch {
+          errorMessage = `HTTP error! Status: ${response.status}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const responseText = await response.text();
+      
+      if (!responseText) {
+        throw new Error("Empty response received from server");
+      }
+      
+      const data = JSON.parse(responseText);
+
+      if (data.success) {
         setAttendanceStatus({
           lastCheckIn:
             qrPayload.type === "check-in"
               ? new Date().toISOString()
-              : attendanceStatus.lastCheckIn,
+              : data.lastCheckIn || attendanceStatus.lastCheckIn,
           lastCheckOut:
             qrPayload.type === "check-out"
               ? new Date().toISOString()
-              : attendanceStatus.lastCheckOut,
-          lastAction: qrPayload.type as "check-in" | "check-out",
+              : data.lastCheckOut || attendanceStatus.lastCheckOut,
+          lastAction: data.lastAction || qrPayload.type as "check-in" | "check-out",
         });
 
         toast.success(
-          `${
-            qrPayload.type === "check-in" ? "Check-in" : "Check-out"
-          } recorded successfully`
+          data.message || `${qrPayload.type === "check-in" ? "Check-in" : "Check-out"} recorded successfully`
         );
+        
+        setScanSuccessTime(Date.now());
       } else {
         toast.error(data.message || "Failed to record attendance");
+        setScanError(data.message || "Failed to record attendance. Please try again.");
       }
     } catch (error) {
       console.error("QR scan error:", error);
-      toast.error("An error occurred. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "An error occurred. Please try again.";
+      toast.error(errorMessage);
+      setScanError(errorMessage);
     } finally {
       setScannerLoading(false);
-      // Re-enable scanner after a short delay
       setTimeout(() => setScannerActive(true), 1500);
     }
   };
 
-  // Generate device fingerprint (simple implementation)
   const generateDeviceFingerprint = async () => {
-    // Collect browser and device info
     const userAgent = navigator.userAgent;
     const screenWidth = window.screen.width;
     const screenHeight = window.screen.height;
@@ -246,15 +263,12 @@ const handleLogin = async (e: React.FormEvent) => {
       (navigator as Navigator & { deviceMemory?: number }).deviceMemory ||
       "unknown";
 
-    // Create a device fingerprint string
     const fingerprintString = `${userAgent}|${screenWidth}x${screenHeight}|${colorDepth}|${timezone}|${language}|${deviceMemory}`;
 
-    // Hash the fingerprint (simple hash for demo)
     const encoder = new TextEncoder();
     const data = encoder.encode(fingerprintString);
     const hashBuffer = await crypto.subtle.digest("SHA-256", data);
 
-    // Convert hash to hex string
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const hashHex = hashArray
       .map((b) => b.toString(16).padStart(2, "0"))
@@ -263,7 +277,6 @@ const handleLogin = async (e: React.FormEvent) => {
     return hashHex;
   };
 
-  // Attempt to restore session on component mount
   useEffect(() => {
     const credentials = getCredentials();
 
@@ -272,15 +285,19 @@ const handleLogin = async (e: React.FormEvent) => {
       setEmail(credentials.email);
       setDeviceId(credentials.deviceId);
 
-      // Verify the session is still valid and get latest status
       const verifySession = async () => {
         try {
           setLoading(true);
+          
+          const timestamp = new Date().getTime();
 
-          const response = await fetch("/api/attendance/student/verify", {
+          const response = await fetch(`/api/attendance/student/verify?_t=${timestamp}`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Pragma": "no-cache",
+              "Expires": "0"
             },
             body: JSON.stringify({
               token: credentials.token,
@@ -289,19 +306,24 @@ const handleLogin = async (e: React.FormEvent) => {
             }),
           });
 
-          // Check if response is ok before trying to parse JSON
           if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
+            const errorText = await response.text();
+            let errorMessage;
+            try {
+              const errorData = JSON.parse(errorText);
+              errorMessage = errorData.message || `HTTP error! Status: ${response.status}`;
+            } catch {
+              errorMessage = `HTTP error! Status: ${response.status}`;
+            }
+            throw new Error(errorMessage);
           }
 
-          // Check if response has content before parsing JSON
           const responseText = await response.text();
           
           if (!responseText) {
             throw new Error("Empty response received from server");
           }
           
-          // Now parse the JSON from the text response
           const data = JSON.parse(responseText);
 
           if (data.success) {
@@ -312,12 +334,10 @@ const handleLogin = async (e: React.FormEvent) => {
               lastAction: data.lastAction,
             });
           } else {
-            // Session is invalid, clear local storage and cookies
             localStorage.removeItem("studentAttendanceToken");
             localStorage.removeItem("studentAttendanceEmail");
             localStorage.removeItem("studentAttendanceDeviceId");
             
-            // Clear cookies
             document.cookie = "studentAttendanceToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
             document.cookie = "studentAttendanceEmail=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
             document.cookie = "studentAttendanceDeviceId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
@@ -327,6 +347,18 @@ const handleLogin = async (e: React.FormEvent) => {
           }
         } catch (error) {
           console.error("Error verifying session:", error);
+          const errorMessage = error instanceof Error ? error.message : "Session verification failed";
+          toast.error(errorMessage);
+          
+          localStorage.removeItem("studentAttendanceToken");
+          localStorage.removeItem("studentAttendanceEmail");
+          localStorage.removeItem("studentAttendanceDeviceId");
+          
+          document.cookie = "studentAttendanceToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          document.cookie = "studentAttendanceEmail=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          document.cookie = "studentAttendanceDeviceId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          
+          setSessionToken("");
         } finally {
           setLoading(false);
         }
@@ -336,7 +368,6 @@ const handleLogin = async (e: React.FormEvent) => {
     }
   }, []);
 
-  // Format attendance time for display
   const formatAttendanceTime = (timestamp: string | null) => {
     if (!timestamp) return "Not recorded";
 
@@ -348,7 +379,6 @@ const handleLogin = async (e: React.FormEvent) => {
     }
   };
 
-  // Prevent users from clearing their session by adding an event listener to storage changes
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (
@@ -357,7 +387,6 @@ const handleLogin = async (e: React.FormEvent) => {
         e.key === "studentAttendanceDeviceId"
       ) {
         if (!e.newValue && sessionToken) {
-          // Someone tried to clear the storage, restore it
           localStorage.setItem("studentAttendanceToken", sessionToken);
           localStorage.setItem("studentAttendanceEmail", email);
           localStorage.setItem("studentAttendanceDeviceId", deviceId);
@@ -454,6 +483,20 @@ const handleLogin = async (e: React.FormEvent) => {
                   Attendance Status
                 </h3>
                 <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="text-gray-400">Student:</div>
+                  <div className="text-white font-medium">
+                    {studentInfo?.name || email}
+                  </div>
+                  
+                  {studentInfo?.campus && (
+                    <>
+                      <div className="text-gray-400">Campus:</div>
+                      <div className="text-white font-medium">
+                        {studentInfo.campus}
+                      </div>
+                    </>
+                  )}
+                  
                   <div className="text-gray-400">Last Check-in:</div>
                   <div
                     className={`text-${
@@ -502,10 +545,17 @@ const handleLogin = async (e: React.FormEvent) => {
                       onScan={(result) => handleScan(result)}
                       onError={(error) => {
                         console.error("Scanner error:", error);
+                        setScanError("Scanner error. Please refresh and try again.");
                         toast.error("Scanner error. Please try again.");
                         setScannerActive(false);
                         setTimeout(() => setScannerActive(true), 1000);
                       }}
+                      // Using higher quality and better scanning options
+                      constraints={{
+                        facingMode: "environment",
+                        aspectRatio: 1,
+                      }}
+                      scanDelay={500}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gray-900">
@@ -517,14 +567,32 @@ const handleLogin = async (e: React.FormEvent) => {
                           </p>
                         </div>
                       ) : (
-                        <Button
-                          onClick={() => setScannerActive(true)}
-                          className="bg-purple-600 hover:bg-purple-700"
-                        >
-                          Start Scanner
-                        </Button>
+                        <div className="flex flex-col items-center">
+                          <Button
+                            onClick={() => setScannerActive(true)}
+                            className="mb-2 bg-purple-600 hover:bg-purple-700"
+                          >
+                            Start Scanner
+                          </Button>
+                          {scanError && (
+                            <p className="text-red-400 text-sm mt-2 text-center max-w-xs">
+                              {scanError}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
+                  )}
+                  
+                  {/* Refresh scanner button in the corner */}
+                  {scannerActive && (
+                    <Button 
+                      size="icon"
+                      className="absolute top-2 right-2 bg-black/50 hover:bg-black/80"
+                      onClick={handleRefreshScanner}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
                   )}
                 </div>
               </div>
@@ -542,7 +610,11 @@ const handleLogin = async (e: React.FormEvent) => {
               <div className="flex w-full space-x-2">
                 <Button
                   className="flex-1 bg-green-600 hover:bg-green-700"
-                  onClick={() => setScannerActive(true)}
+                  onClick={() => {
+                    setScannerActive(false);
+                    setScanError(null);
+                    setTimeout(() => setScannerActive(true), 500);
+                  }}
                   disabled={scannerActive || scannerLoading}
                 >
                   <UserCheck className="h-4 w-4 mr-2" />
@@ -550,7 +622,11 @@ const handleLogin = async (e: React.FormEvent) => {
                 </Button>
                 <Button
                   className="flex-1 bg-blue-600 hover:bg-blue-700"
-                  onClick={() => setScannerActive(true)}
+                  onClick={() => {
+                    setScannerActive(false);
+                    setScanError(null);
+                    setTimeout(() => setScannerActive(true), 500);
+                  }}
                   disabled={scannerActive || scannerLoading}
                 >
                   <UserX className="h-4 w-4 mr-2" />

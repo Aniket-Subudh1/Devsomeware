@@ -71,7 +71,6 @@ export async function GET(req: NextRequest) {
       }, { status: 401 });
     }
     
-    // Connect to db and get real stats
     await import('@/middleware/connectDb').then(module => module.default());
     const Attendance = (await import('@/models/Attendance')).default;
     const TestUsers = (await import('@/models/TestUsers')).default;

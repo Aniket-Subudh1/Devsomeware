@@ -12,12 +12,16 @@ import {
   UserCheck,
   UserX,
   BarChart4,
+  Hand,
   RefreshCw,
   ChevronDown,
   FileSpreadsheet,
   FileDown,
   Eye,
   AlertTriangle,
+  School,
+  UserMinus,
+  Building,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,6 +102,14 @@ interface AttendanceRecord {
   student?: Student;
 }
 
+interface CampusStats {
+  totalStudents: number;
+  presentToday: number;
+  absentToday: number;
+  partialToday: number;
+  attendanceRate: number;
+}
+
 interface AttendanceStats {
   totalStudents: number;
   presentToday: number;
@@ -113,7 +125,25 @@ interface AttendanceStats {
     absent: number[];
     partial: number[];
   };
+  campusStats?: {
+    bbsr: CampusStats;
+    pkd: CampusStats;
+    vzm: CampusStats;
+    [key: string]: CampusStats;
+  };
+  activeSessions: number;
 }
+
+// List of absent students (those who haven't checked in today)
+interface AbsentStudent {
+  _id: string;
+  name: string;
+  email: string;
+  regno?: string;
+  branch?: string;
+  campus?: string;
+}
+
 export default function AttendanceAdminDashboard() {
   const router = useRouter();
 
@@ -124,13 +154,10 @@ export default function AttendanceAdminDashboard() {
   const [dataLoading, setDataLoading] = useState(false);
 
   // Dashboard data and filters
-  const [attendanceRecords, setAttendanceRecords] = useState<
-    AttendanceRecord[]
-  >([]);
-  const [filteredRecords, setFilteredRecords] = useState<AttendanceRecord[]>(
-    []
-  );
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [filteredRecords, setFilteredRecords] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [absentStudents, setAbsentStudents] = useState<AbsentStudent[]>([]);
   const [stats, setStats] = useState<AttendanceStats>({
     totalStudents: 0,
     presentToday: 0,
@@ -146,20 +173,54 @@ export default function AttendanceAdminDashboard() {
       absent: [],
       partial: [],
     },
+    campusStats: {
+      bbsr: {
+        totalStudents: 0,
+        presentToday: 0,
+        absentToday: 0,
+        partialToday: 0,
+        attendanceRate: 0,
+      },
+      pkd: {
+        totalStudents: 0,
+        presentToday: 0,
+        absentToday: 0,
+        partialToday: 0,
+        attendanceRate: 0,
+      },
+      vzm: {
+        totalStudents: 0,
+        presentToday: 0,
+        absentToday: 0,
+        partialToday: 0,
+        attendanceRate: 0,
+      },
+    },
+    activeSessions: 0,
   });
 
   // Filter state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [campusFilter, setCampusFilter] = useState<string>("all");
   const [dateRange, setDateRange] = useState<DateRangePickerValue>({
     from: new Date(),
     to: new Date(),
   });
-  const [currentView, setCurrentView] = useState<"day" | "week" | "month">(
-    "day"
-  );
+  const [currentView, setCurrentView] = useState<"day" | "week" | "month">("day");
   const ALL_STUDENTS_VALUE = 'ALL_STUDENTS';
   const [selectedStudent, setSelectedStudent] = useState<string>(ALL_STUDENTS_VALUE);
+
+  // Page state
+  const [currentPage, setCurrentPage] = useState(1);
+  const recordsPerPage = 10;
+  
+  // Campus names mapping
+  const campusNames = {
+    bbsr: "Bhubaneswar",
+    pkd: "Paralakhemundi",
+    vzm: "Vizianagaram",
+  };
 
   // Authenticate admin
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -199,8 +260,6 @@ export default function AttendanceAdminDashboard() {
       setLoading(false);
     }
   };
-  
-
 
   // Fetch attendance data
   const fetchAttendanceData = async () => {
@@ -221,10 +280,6 @@ export default function AttendanceAdminDashboard() {
 
       // Use the password from state or session storage
       const password = adminPassword || sessionStorage.getItem("adminPassword");
-      console.log(
-        "Using admin password:",
-        password ? "Yes (password available)" : "No (no password)"
-      );
 
       // Make API call with the admin password
       const response = await fetch(
@@ -244,17 +299,18 @@ export default function AttendanceAdminDashboard() {
         );
       }
 
-      
       const data = await response.json();
 
       if (data.success) {
         console.log("Data successfully fetched");
-        // Only set real data from database
+        
+        // Set records and students from API
         setAttendanceRecords(data.records || []);
         setFilteredRecords(data.records || []);
         setStudents(data.students || []);
-        setStats(
-          data.stats || {
+        
+        // Extract statistics
+        setStats(data.stats || {
             totalStudents: data.students?.length || 0,
             presentToday: 0,
             absentToday: 0,
@@ -276,13 +332,42 @@ export default function AttendanceAdminDashboard() {
               absent: Array(30).fill(0),
               partial: Array(30).fill(0),
             },
-          }
-        );
+            campusStats: {
+              bbsr: {
+                totalStudents: 0,
+                presentToday: 0,
+                absentToday: 0,
+                partialToday: 0,
+                attendanceRate: 0,
+              },
+              pkd: {
+                totalStudents: 0,
+                presentToday: 0,
+                absentToday: 0,
+                partialToday: 0,
+                attendanceRate: 0,
+              },
+              vzm: {
+                totalStudents: 0,
+                presentToday: 0,
+                absentToday: 0,
+                partialToday: 0,
+                attendanceRate: 0,
+              },
+            },
+            activeSessions: 0,
+          });
+        
+        // Calculate absent students (students who haven't checked in today)
+        calculateAbsentStudents(data.records, data.students);
+        
+        // Update campus stats
+        calculateCampusStats(data.records, data.students);
       } else {
         console.error("API returned error:", data.message);
         toast.error(data.message || "Failed to fetch attendance data");
 
-        // Set empty arrays and zero values - no mock data
+        // Set empty arrays and zero values
         setAttendanceRecords([]);
         setFilteredRecords([]);
         setStudents([]);
@@ -308,16 +393,41 @@ export default function AttendanceAdminDashboard() {
             absent: Array(30).fill(0),
             partial: Array(30).fill(0),
           },
+          campusStats: {
+            bbsr: {
+              totalStudents: 0,
+              presentToday: 0,
+              absentToday: 0,
+              partialToday: 0,
+              attendanceRate: 0,
+            },
+            pkd: {
+              totalStudents: 0,
+              presentToday: 0,
+              absentToday: 0,
+              partialToday: 0,
+              attendanceRate: 0,
+            },
+            vzm: {
+              totalStudents: 0,
+              presentToday: 0,
+              absentToday: 0,
+              partialToday: 0,
+              attendanceRate: 0,
+            },
+          },
+          activeSessions: 0,
         });
       }
     } catch (error) {
       console.error("Error fetching attendance data:", error);
       toast.error("Failed to fetch attendance data. Please try again.");
 
-      // Set empty arrays and zero values instead of mock data
+      // Set empty arrays and zero values
       setAttendanceRecords([]);
       setFilteredRecords([]);
       setStudents([]);
+      setAbsentStudents([]);
       setStats({
         totalStudents: 0,
         presentToday: 0,
@@ -340,10 +450,147 @@ export default function AttendanceAdminDashboard() {
           absent: Array(30).fill(0),
           partial: Array(30).fill(0),
         },
+        campusStats: {
+          bbsr: {
+            totalStudents: 0,
+            presentToday: 0,
+            absentToday: 0,
+            partialToday: 0,
+            attendanceRate: 0,
+          },
+          pkd: {
+            totalStudents: 0,
+            presentToday: 0,
+            absentToday: 0,
+            partialToday: 0,
+            attendanceRate: 0,
+          },
+          vzm: {
+            totalStudents: 0,
+            presentToday: 0,
+            absentToday: 0,
+            partialToday: 0,
+            attendanceRate: 0,
+          },
+        },
+        activeSessions: 0,
       });
     } finally {
       setDataLoading(false);
     }
+  };
+
+  // Calculate campus-specific stats
+  const calculateCampusStats = (records: AttendanceRecord[], allStudents: Student[]) => {
+    // Initialize campus stats
+    const campusStats = {
+      bbsr: {
+        totalStudents: 0,
+        presentToday: 0,
+        absentToday: 0,
+        partialToday: 0,
+        attendanceRate: 0,
+      },
+      pkd: {
+        totalStudents: 0,
+        presentToday: 0,
+        absentToday: 0,
+        partialToday: 0,
+        attendanceRate: 0,
+      },
+      vzm: {
+        totalStudents: 0,
+        presentToday: 0,
+        absentToday: 0,
+        partialToday: 0,
+        attendanceRate: 0,
+      },
+    };
+
+    // Count students by campus
+    allStudents.forEach(student => {
+      const campus = student.campus?.toLowerCase() || "unknown";
+      if (campusStats[campus as keyof typeof campusStats]) {
+        campusStats[campus as keyof typeof campusStats].totalStudents += 1;
+      }
+    });
+
+    // Filter today's records
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayRecords = records.filter(record => {
+      const recordDate = new Date(record.date);
+      return recordDate >= today && recordDate < tomorrow;
+    });
+
+    // Count present and partial students by campus
+    const processedStudentIds = new Set<string>();
+    
+    todayRecords.forEach(record => {
+      const student = allStudents.find(s => s._id === record.testUserId);
+      if (student) {
+        const campus = student.campus?.toLowerCase() || "unknown";
+        if (campusStats[campus as keyof typeof campusStats]) {
+          // Only count each student once for today
+          if (!processedStudentIds.has(record.testUserId)) {
+            processedStudentIds.add(record.testUserId);
+            
+            // Count based on status
+            if (record.status === 'present') {
+              campusStats[campus as keyof typeof campusStats].presentToday += 1;
+            } else if (record.status === 'half-day') {
+              campusStats[campus as keyof typeof campusStats].partialToday += 1;
+            }
+          }
+        }
+      }
+    });
+
+    // Calculate absent students and attendance rates
+    Object.keys(campusStats).forEach(campus => {
+      const key = campus as keyof typeof campusStats;
+      campusStats[key].absentToday = Math.max(0, campusStats[key].totalStudents - 
+        (campusStats[key].presentToday + campusStats[key].partialToday));
+      
+      campusStats[key].attendanceRate = campusStats[key].totalStudents > 0 ? 
+        Math.round(((campusStats[key].presentToday + (campusStats[key].partialToday * 0.5)) / 
+        campusStats[key].totalStudents) * 100) : 0;
+    });
+
+    // Update stats with campus-specific data
+    setStats(prevStats => ({
+      ...prevStats,
+      campusStats
+    }));
+  };
+
+  // Calculate list of absent students
+  const calculateAbsentStudents = (records: AttendanceRecord[], allStudents: Student[]) => {
+    // Filter today's records
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayRecords = records.filter(record => {
+      const recordDate = new Date(record.date);
+      return recordDate >= today && recordDate < tomorrow;
+    });
+
+    // Get IDs of students who checked in today
+    const presentStudentIds = new Set<string>();
+    todayRecords.forEach(record => {
+      if (record.checkInTime) {
+        presentStudentIds.add(record.testUserId);
+      }
+    });
+
+    // Find students who haven't checked in
+    const absent = allStudents.filter(student => !presentStudentIds.has(student._id));
+    setAbsentStudents(absent);
   };
 
   // Apply filters to records
@@ -352,7 +599,7 @@ export default function AttendanceAdminDashboard() {
 
     let filtered = [...attendanceRecords];
 
-   
+    // Apply date range filter
     if (dateRange.from) {
       const fromDate = new Date(dateRange.from);
       fromDate.setHours(0, 0, 0, 0);
@@ -378,7 +625,15 @@ export default function AttendanceAdminDashboard() {
       filtered = filtered.filter((record) => record.status === statusFilter);
     }
 
-    // Apply search filter (search by name or email)
+    // Apply campus filter
+    if (campusFilter !== "all") {
+      filtered = filtered.filter((record) => {
+        const student = record.student;
+        return student?.campus?.toLowerCase() === campusFilter.toLowerCase();
+      });
+    }
+
+    // Apply search filter (search by name, email, or registration number)
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter((record) => {
@@ -394,6 +649,7 @@ export default function AttendanceAdminDashboard() {
       });
     }
 
+    // Apply student filter
     if (selectedStudent && selectedStudent !== ALL_STUDENTS_VALUE) {
       filtered = filtered.filter(
         (record) =>
@@ -403,24 +659,29 @@ export default function AttendanceAdminDashboard() {
     }
 
     setFilteredRecords(filtered);
-  }, [attendanceRecords, searchTerm, statusFilter, dateRange, selectedStudent]);
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [attendanceRecords, searchTerm, statusFilter, campusFilter, dateRange, selectedStudent]);
 
+  // Export to CSV
   const exportToCSV = () => {
-    if (filteredRecords.length === 0) {
+    if (filteredRecords.length === 0 && absentStudents.length === 0) {
       toast.error("No data to export");
       return;
     }
 
     try {
-      // Create CSV content
-      let csvContent =
-        "Date,Name,Email,Check In,Check Out,Duration (mins),Status\n";
+      // Create CSV header
+      let csvContent = "Campus,Date,Name,Email,Registration Number,Check In,Check Out,Duration (mins),Status\n";
 
+      // Add present/partial students (from filteredRecords)
       filteredRecords.forEach((record) => {
+        const campus = record.student?.campus || "Unknown";
         const row = [
+          campus,
           new Date(record.date).toLocaleDateString(),
           record.student?.name || "Unknown",
           record.email,
+          record.student?.regno || "N/A",
           record.checkInTime
             ? new Date(record.checkInTime).toLocaleTimeString()
             : "N/A",
@@ -434,6 +695,25 @@ export default function AttendanceAdminDashboard() {
         csvContent += row.join(",") + "\n";
       });
 
+      // Add absent students with appropriate indicators
+      absentStudents.forEach((student) => {
+        if (campusFilter === "all" || student.campus?.toLowerCase() === campusFilter) {
+          const row = [
+            student.campus || "Unknown",
+            new Date().toLocaleDateString(),
+            student.name || "Unknown",
+            student.email,
+            student.regno || "N/A",
+            "N/A", // No check-in
+            "N/A", // No check-out
+            "0",   // Duration
+            "absent",
+          ];
+
+          csvContent += row.join(",") + "\n";
+        }
+      });
+
       // Create and download the file
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
@@ -441,7 +721,7 @@ export default function AttendanceAdminDashboard() {
       link.setAttribute("href", url);
       link.setAttribute(
         "download",
-        `attendance_report_${new Date().toISOString().split("T")[0]}.csv`
+        `attendance_report_${campusFilter !== "all" ? campusFilter + "_" : ""}${new Date().toISOString().split("T")[0]}.csv`
       );
       link.style.visibility = "hidden";
       document.body.appendChild(link);
@@ -458,11 +738,53 @@ export default function AttendanceAdminDashboard() {
   // Export data to Excel (XLSX)
   const exportToExcel = () => {
     toast.info(
-      "Exporting to Excel... This would trigger the Excel export functionality"
+      "Exporting to Excel... This would trigger the Excel export functionality with campus-specific sheets"
     );
   };
 
-  
+  // Update attendance status for students who checked in but didn't check out
+  const markPendingCheckoutsAsPartial = async () => {
+    try {
+      setLoading(true);
+      
+      // Use the password from state or session storage
+      const password = adminPassword || sessionStorage.getItem("adminPassword");
+      
+      const response = await fetch("/api/attendance/admin/update-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          adminPassword: password,
+          // Update records with check-in but no check-out to half-day
+          updateType: "pending-checkouts"
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(`${data.updatedCount || 0} records marked as partial attendance`);
+        // Refresh data
+        fetchAttendanceData();
+      } else {
+        toast.error(data.message || "Failed to update attendance status");
+      }
+    } catch (error) {
+      console.error("Error updating attendance status:", error);
+      toast.error("Failed to update attendance status");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle pagination
+  const paginate = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
+
+  // Set up authentication check on component mount
   useEffect(() => {
     const isAuthenticated = sessionStorage.getItem("adminAuthenticated");
     const storedPassword = sessionStorage.getItem("adminPassword");
@@ -490,14 +812,30 @@ export default function AttendanceAdminDashboard() {
   };
 
   // Calculate attendance percentage
-  const getAttendancePercentage = () => {
+  const getAttendancePercentage = (campusKey?: string) => {
+    if (campusKey && campusKey !== "all") {
+      const campusData = stats.campusStats?.[campusKey as keyof typeof stats.campusStats];
+      if (!campusData || campusData.totalStudents === 0) return 0;
+      
+      return Math.round(
+        ((campusData.presentToday + campusData.partialToday * 0.5) / campusData.totalStudents) * 100
+      );
+    }
+    
+    // Overall percentage
     if (stats.totalStudents === 0) return 0;
     return Math.round(
-      ((stats.presentToday + stats.partialToday * 0.5) / stats.totalStudents) *
-        100
+      ((stats.presentToday + stats.partialToday * 0.5) / stats.totalStudents) * 100
     );
   };
 
+  // Pagination calculations
+  const indexOfLastRecord = currentPage * recordsPerPage;
+  const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
+  const currentRecords = filteredRecords.slice(indexOfFirstRecord, indexOfLastRecord);
+  const totalPages = Math.ceil(filteredRecords.length / recordsPerPage);
+
+  // Login screen
   if (!authenticated) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4">
@@ -559,6 +897,7 @@ export default function AttendanceAdminDashboard() {
     );
   }
 
+  // Main dashboard
   return (
     <div className="min-h-screen bg-black p-4 md:p-8">
       <Toaster richColors position="top-center" />
@@ -582,6 +921,13 @@ export default function AttendanceAdminDashboard() {
                 QR Generator
               </Button>
               <Button
+                className="bg-purple-600 hover:bg-purple-700"
+                onClick={() => router.push("/adminupdateattendancemanually")}
+              >
+                <Hand className="h-4 w-4 mr-2" />
+                Attendance Manual Update
+              </Button>
+              <Button
                 variant="outline"
                 className="border-gray-700 text-gray-400 hover:bg-gray-800"
                 onClick={fetchAttendanceData}
@@ -592,7 +938,94 @@ export default function AttendanceAdminDashboard() {
             </div>
           </header>
 
-          {/* Stats Overview */}
+          {/* Campus Filter */}
+          <div className="mb-6">
+            <div className="flex flex-col md:flex-row gap-4 items-center">
+              <Label htmlFor="campus-filter" className="text-gray-300 min-w-[100px]">
+                Campus Filter:
+              </Label>
+              <Select
+                value={campusFilter}
+                onValueChange={setCampusFilter}
+              >
+                <SelectTrigger className="w-full md:w-[200px] bg-gray-900 border-gray-700 text-white">
+                  <SelectValue placeholder="All Campuses" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-900 border-gray-700 text-white">
+                  <SelectItem value="all">All Campuses</SelectItem>
+                  <SelectItem value="bbsr">Bhubaneswar (BBSR)</SelectItem>
+                  <SelectItem value="pkd">Paralakhemundi (PKD)</SelectItem>
+                  <SelectItem value="vzm">Vizianagaram (VZM)</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Button 
+                variant="outline" 
+                className="border-amber-500/30 text-amber-400 hover:bg-amber-950/30"
+                onClick={markPendingCheckoutsAsPartial}
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <UserMinus className="h-4 w-4 mr-2" />
+                )}
+                Mark Pending Checkouts as Partial
+              </Button>
+            </div>
+          </div>
+
+          {/* Campus Stats */}
+          {campusFilter !== "all" && stats.campusStats ? (
+            <Card className="bg-black border-purple-500/30 mb-8">
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Building className="h-5 w-5 text-purple-500 mr-2" />
+                  {campusNames[campusFilter as keyof typeof campusNames] || campusFilter} Campus Stats
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-gray-900/50 p-4 rounded-lg border border-purple-500/30">
+                    <div className="text-sm text-gray-400">Total Students</div>
+                    <div className="text-2xl font-bold text-white">
+                      {stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.totalStudents || 0}
+                    </div>
+                  </div>
+                  <div className="bg-gray-900/50 p-4 rounded-lg border border-green-500/30">
+                    <div className="text-sm text-gray-400">Present Today</div>
+                    <div className="text-2xl font-bold text-green-400">
+                      {stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.presentToday || 0}
+                    </div>
+                  </div>
+                  <div className="bg-gray-900/50 p-4 rounded-lg border border-amber-500/30">
+                    <div className="text-sm text-gray-400">Partial Attendance</div>
+                    <div className="text-2xl font-bold text-amber-400">
+                      {stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.partialToday || 0}
+                    </div>
+                  </div>
+                  <div className="bg-gray-900/50 p-4 rounded-lg border border-red-500/30">
+                    <div className="text-sm text-gray-400">Absent Today</div>
+                    <div className="text-2xl font-bold text-red-400">
+                      {stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.absentToday || 0}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Attendance Rate: {stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.attendanceRate || 0}%</span>
+                  </div>
+                  <Progress 
+                    value={stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.attendanceRate || 0} 
+                    className="h-2"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {/* Stats Overview - for All Campuses or when no campus filter is selected */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <Card className="bg-black border-purple-500/30">
               <CardHeader className="pb-2">
@@ -679,9 +1112,9 @@ export default function AttendanceAdminDashboard() {
           {/* Today's Attendance Progress */}
           <Card className="bg-black border-purple-500/30 mb-8">
             <CardHeader>
-              <CardTitle>Today&apos;s Attendance Progress</CardTitle>
+              <CardTitle>Today's Attendance Progress</CardTitle>
               <CardDescription>
-                {getAttendancePercentage()}% of students have checked in today
+                {getAttendancePercentage(campusFilter)}% of students have checked in today
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -689,19 +1122,31 @@ export default function AttendanceAdminDashboard() {
                 <div className="flex justify-between text-xs text-gray-500">
                   <div className="flex items-center">
                     <div className="h-3 w-3 rounded-full bg-green-500 mr-1"></div>
-                    <span>Present: {stats.presentToday}</span>
+                    <span>Present: {campusFilter !== "all" && stats.campusStats 
+                      ? stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.presentToday 
+                      : stats.presentToday}
+                    </span>
                   </div>
                   <div className="flex items-center">
                     <div className="h-3 w-3 rounded-full bg-amber-500 mr-1"></div>
-                    <span>Partial: {stats.partialToday}</span>
+                    <span>Partial: {campusFilter !== "all" && stats.campusStats
+                      ? stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.partialToday
+                      : stats.partialToday}
+                    </span>
                   </div>
                   <div className="flex items-center">
                     <div className="h-3 w-3 rounded-full bg-red-500 mr-1"></div>
-                    <span>Absent: {stats.absentToday}</span>
+                    <span>Absent: {campusFilter !== "all" && stats.campusStats
+                      ? stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.absentToday
+                      : stats.absentToday}
+                    </span>
                   </div>
                   <div className="flex items-center">
                     <div className="h-3 w-3 rounded-full bg-blue-500 mr-1"></div>
-                    <span>Total: {stats.totalStudents}</span>
+                    <span>Total: {campusFilter !== "all" && stats.campusStats
+                      ? stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.totalStudents
+                      : stats.totalStudents}
+                    </span>
                   </div>
                 </div>
 
@@ -709,17 +1154,19 @@ export default function AttendanceAdminDashboard() {
                   <div
                     className="bg-green-500 h-full"
                     style={{
-                      width: `${
-                        (stats.presentToday / stats.totalStudents) * 100
-                      }%`,
+                      width: `${campusFilter !== "all" && stats.campusStats
+                        ? (stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.presentToday || 0) / 
+                          (stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.totalStudents || 1) * 100
+                        : (stats.presentToday / Math.max(1, stats.totalStudents)) * 100}%`,
                     }}
                   ></div>
                   <div
                     className="bg-amber-500 h-full"
                     style={{
-                      width: `${
-                        (stats.partialToday / stats.totalStudents) * 100
-                      }%`,
+                      width: `${campusFilter !== "all" && stats.campusStats
+                        ? (stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.partialToday || 0) / 
+                          (stats.campusStats[campusFilter as keyof typeof stats.campusStats]?.totalStudents || 1) * 100
+                        : (stats.partialToday / Math.max(1, stats.totalStudents)) * 100}%`,
                     }}
                   ></div>
                 </div>
@@ -755,8 +1202,9 @@ export default function AttendanceAdminDashboard() {
 
           {/* Attendance Data Tabs */}
           <Tabs defaultValue="records" className="w-full">
-            <TabsList className="grid grid-cols-3 mb-8">
+            <TabsList className="grid grid-cols-4 mb-8">
               <TabsTrigger value="records">Attendance Records</TabsTrigger>
+              <TabsTrigger value="absent">Absent Students</TabsTrigger>
               <TabsTrigger value="students">Student Reports</TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
             </TabsList>
@@ -783,21 +1231,24 @@ export default function AttendanceAdminDashboard() {
                     </div>
 
                     <Select
-    value={selectedStudent}
-    onValueChange={setSelectedStudent}
-  >
-    <SelectTrigger className="w-full md:w-[300px] bg-gray-900 border-gray-700 text-white">
-      <SelectValue placeholder="Select Student" />
-    </SelectTrigger>
-    <SelectContent className="bg-gray-900 border-gray-700 text-white max-h-[300px]">
-      <SelectItem value={ALL_STUDENTS_VALUE}>All Students</SelectItem>
-      {students.map((student) => (
-        <SelectItem key={student._id} value={student._id}>
-          {student.name} ({student.regno || student.email})
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
+                      value={selectedStudent}
+                      onValueChange={setSelectedStudent}
+                    >
+                      <SelectTrigger className="w-full md:w-[300px] bg-gray-900 border-gray-700 text-white">
+                        <SelectValue placeholder="Select Student" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-gray-900 border-gray-700 text-white max-h-[300px]">
+                        <SelectItem value={ALL_STUDENTS_VALUE}>All Students</SelectItem>
+                        {students
+                          .filter(student => campusFilter === "all" || student.campus?.toLowerCase() === campusFilter)
+                          .map((student) => (
+                            <SelectItem key={student._id} value={student._id}>
+                              {student.name} ({student.regno || student.email})
+                            </SelectItem>
+                          ))
+                        }
+                      </SelectContent>
+                    </Select>
 
                     <Popover>
                       <PopoverTrigger asChild>
@@ -817,6 +1268,21 @@ export default function AttendanceAdminDashboard() {
                         />
                       </PopoverContent>
                     </Popover>
+
+                    <Select 
+                      value={statusFilter} 
+                      onValueChange={setStatusFilter}
+                    >
+                      <SelectTrigger className="w-[150px] bg-gray-900 border-gray-700 text-white">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-gray-900 border-gray-700 text-white">
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="present">Present</SelectItem>
+                        <SelectItem value="half-day">Partial</SelectItem>
+                        <SelectItem value="absent">Absent</SelectItem>
+                      </SelectContent>
+                    </Select>
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -862,6 +1328,7 @@ export default function AttendanceAdminDashboard() {
                         <TableHeader className="bg-gray-900">
                           <TableRow>
                             <TableHead className="text-left">Student</TableHead>
+                            <TableHead className="text-left">Campus</TableHead>
                             <TableHead className="text-left">Date</TableHead>
                             <TableHead className="text-left">
                               Check In
@@ -877,7 +1344,7 @@ export default function AttendanceAdminDashboard() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {filteredRecords.slice(0, 10).map((record) => (
+                          {currentRecords.map((record) => (
                             <TableRow
                               key={record._id}
                               className="hover:bg-gray-900/50"
@@ -900,6 +1367,11 @@ export default function AttendanceAdminDashboard() {
                                     </div>
                                   </div>
                                 </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">
+                                  {record.student?.campus || "Unknown"}
+                                </Badge>
                               </TableCell>
                               <TableCell>
                                 {new Date(record.date).toLocaleDateString()}
@@ -1088,9 +1560,9 @@ export default function AttendanceAdminDashboard() {
                   {!dataLoading && filteredRecords.length > 0 && (
                     <div className="flex justify-between items-center mt-4">
                       <div className="text-sm text-gray-500">
-                        Showing <span className="font-medium">1</span> to{" "}
+                        Showing <span className="font-medium">{indexOfFirstRecord + 1}</span> to{" "}
                         <span className="font-medium">
-                          {Math.min(10, filteredRecords.length)}
+                          {Math.min(indexOfLastRecord, filteredRecords.length)}
                         </span>{" "}
                         of{" "}
                         <span className="font-medium">
@@ -1099,13 +1571,19 @@ export default function AttendanceAdminDashboard() {
                         results
                       </div>
                       <div className="flex space-x-2">
-                        <Button variant="outline" size="sm" disabled>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          disabled={currentPage === 1}
+                          onClick={() => paginate(currentPage - 1)}
+                        >
                           Previous
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={filteredRecords.length <= 10}
+                          disabled={currentPage === totalPages}
+                          onClick={() => paginate(currentPage + 1)}
                         >
                           Next
                         </Button>
@@ -1116,34 +1594,652 @@ export default function AttendanceAdminDashboard() {
               </Card>
             </TabsContent>
 
-            {/* Students Tab */}
-            <TabsContent value="students" className="space-y-4">
+            {/* Absent Students Tab */}
+            <TabsContent value="absent" className="space-y-4">
               <Card className="bg-black border-purple-500/30">
                 <CardHeader>
-                  <CardTitle>Student Reports</CardTitle>
+                  <CardTitle>Absent Students</CardTitle>
                   <CardDescription>
-                    View detailed attendance reports for specific students
+                    Students who haven't checked in today
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-col md:flex-row gap-4 mb-6">
-                    <Select
-                      value={selectedStudent}
-                      onValueChange={setSelectedStudent}
-                    >
-                      <SelectTrigger className="w-full md:w-[300px] bg-gray-900 border-gray-700 text-white">
-                        <SelectValue placeholder="Select Student" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-900 border-gray-700 text-white max-h-[300px]">
-                        <SelectItem value="">All Students</SelectItem>
-                        {students.map((student) => (
+                  {dataLoading ? (
+                    <div className="flex justify-center items-center h-64">
+                    <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+                  </div>
+                ) : absentStudents.length === 0 ? (
+                  <div className="text-center py-10">
+                    <h3 className="text-lg font-medium text-gray-400">
+                      No absent students found
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-2">
+                      All students have checked in today.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border border-gray-800">
+                    <Table>
+                      <TableHeader className="bg-gray-900">
+                        <TableRow>
+                          <TableHead className="text-left">Student</TableHead>
+                          <TableHead className="text-left">Campus</TableHead>
+                          <TableHead className="text-left">Email</TableHead>
+                          <TableHead className="text-left">Registration No.</TableHead>
+                          <TableHead className="text-left">Branch</TableHead>
+                          <TableHead className="text-left">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {absentStudents
+                          .filter(student => campusFilter === "all" || 
+                            student.campus?.toLowerCase() === campusFilter.toLowerCase())
+                          .slice(0, 20) // Limit to 20 students for performance
+                          .map((student) => (
+                            <TableRow
+                              key={student._id}
+                              className="hover:bg-gray-900/50"
+                            >
+                              <TableCell className="font-medium">
+                                <div className="flex items-center">
+                                  <Avatar className="h-8 w-8 mr-2">
+                                    <AvatarFallback>
+                                      {student.name ? student.name.charAt(0) : "?"}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <div className="font-medium">
+                                      {student.name || "Unknown"}
+                                    </div>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">
+                                  {student.campus || "Unknown"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>{student.email}</TableCell>
+                              <TableCell>{student.regno || "N/A"}</TableCell>
+                              <TableCell>{student.branch || "N/A"}</TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="outline"
+                                  className="bg-red-900/20 text-red-400 border-red-500/30"
+                                >
+                                  Absent
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                <div className="mt-6 flex justify-end">
+                  <Button
+                    variant="outline"
+                    className="border-gray-700 text-gray-400 hover:bg-gray-800"
+                    onClick={() => exportToCSV()}
+                  >
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Export Absent List
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Students Tab */}
+          <TabsContent value="students" className="space-y-4">
+            <Card className="bg-black border-purple-500/30">
+              <CardHeader>
+                <CardTitle>Student Reports</CardTitle>
+                <CardDescription>
+                  View detailed attendance reports for specific students
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col md:flex-row gap-4 mb-6">
+                  <Select
+                    value={selectedStudent}
+                    onValueChange={setSelectedStudent}
+                  >
+                    <SelectTrigger className="w-full md:w-[300px] bg-gray-900 border-gray-700 text-white">
+                      <SelectValue placeholder="Select Student" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-900 border-gray-700 text-white max-h-[300px]">
+                      <SelectItem value={ALL_STUDENTS_VALUE}>All Students</SelectItem>
+                      {students
+                        .filter(student => campusFilter === "all" || student.campus?.toLowerCase() === campusFilter)
+                        .map((student) => (
                           <SelectItem key={student._id} value={student._id}>
                             {student.name} ({student.regno || student.email})
                           </SelectItem>
                         ))}
-                      </SelectContent>
-                    </Select>
+                    </SelectContent>
+                  </Select>
 
+                  <Select
+                    value={currentView}
+                    onValueChange={(value) =>
+                      setCurrentView(value as "day" | "week" | "month")
+                    }
+                  >
+                    <SelectTrigger className="w-[150px] bg-gray-900 border-gray-700 text-white">
+                      <SelectValue placeholder="Period" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-900 border-gray-700 text-white">
+                      <SelectItem value="day">Day</SelectItem>
+                      <SelectItem value="week">Week</SelectItem>
+                      <SelectItem value="month">Month</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedStudent && selectedStudent !== ALL_STUDENTS_VALUE ? (
+                  <div className="space-y-6">
+                    {/* Student Profile */}
+                    {students.find((s) => s._id === selectedStudent) && (
+                      <div className="flex flex-col md:flex-row items-center md:items-start gap-6 p-4 bg-gray-900/20 rounded-lg border border-gray-800">
+                        <Avatar className="h-20 w-20">
+                          <AvatarFallback>
+                            {students
+                              .find((s) => s._id === selectedStudent)
+                              ?.name.charAt(0) || "S"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="space-y-2 text-center md:text-left">
+                          <h3 className="text-xl font-semibold">
+                            {students.find((s) => s._id === selectedStudent)
+                              ?.name || "Selected Student"}
+                          </h3>
+                          <p className="text-gray-400">
+                            {students.find((s) => s._id === selectedStudent)
+                              ?.regno || ""}
+                          </p>
+                          <p className="text-gray-400">
+                            {students.find((s) => s._id === selectedStudent)
+                              ?.email || ""}
+                          </p>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <Badge variant="secondary">
+                              {students.find((s) => s._id === selectedStudent)
+                                ?.branch || "No Branch"}
+                            </Badge>
+                            <Badge variant="secondary">
+                              {students.find((s) => s._id === selectedStudent)
+                                ?.campus || "No Campus"}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="flex-1 flex flex-col md:items-end">
+                          <div className="flex flex-col sm:flex-row gap-4">
+                            <div className="text-center p-3 bg-gray-900/30 rounded-lg">
+                              <div className="text-sm text-gray-400">
+                                Present Days
+                              </div>
+                              <div className="text-2xl font-bold text-green-400">
+                                {
+                                  filteredRecords.filter(
+                                    (r) =>
+                                      r.testUserId === selectedStudent &&
+                                      r.status === "present"
+                                  ).length
+                                }
+                              </div>
+                            </div>
+                            <div className="text-center p-3 bg-gray-900/30 rounded-lg">
+                              <div className="text-sm text-gray-400">
+                                Partial Days
+                              </div>
+                              <div className="text-2xl font-bold text-amber-400">
+                                {
+                                  filteredRecords.filter(
+                                    (r) =>
+                                      r.testUserId === selectedStudent &&
+                                      r.status === "half-day"
+                                  ).length
+                                }
+                              </div>
+                            </div>
+                            <div className="text-center p-3 bg-gray-900/30 rounded-lg">
+                              <div className="text-sm text-gray-400">
+                                Absent Days
+                              </div>
+                              <div className="text-2xl font-bold text-red-400">
+                                {
+                                  filteredRecords.filter(
+                                    (r) =>
+                                      r.testUserId === selectedStudent &&
+                                      r.status === "absent"
+                                  ).length
+                                }
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 w-full md:w-auto">
+                            <div className="text-sm text-gray-400 mb-1">
+                              Attendance Rate
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Progress
+                                value={(() => {
+                                  const records = filteredRecords.filter(
+                                    (r) => r.testUserId === selectedStudent
+                                  );
+                                  if (records.length === 0) return 0;
+
+                                  const present = records.filter(
+                                    (r) => r.status === "present"
+                                  ).length;
+                                  const partial = records.filter(
+                                    (r) => r.status === "half-day"
+                                  ).length;
+
+                                  return (
+                                    ((present + partial * 0.5) /
+                                      records.length) *
+                                    100
+                                  );
+                                })()}
+                                className="h-2 w-full md:w-[200px]"
+                              />
+                              <span className="text-sm font-medium">
+                                {(() => {
+                                  const records = filteredRecords.filter(
+                                    (r) => r.testUserId === selectedStudent
+                                  );
+                                  if (records.length === 0) return "0%";
+
+                                  const present = records.filter(
+                                    (r) => r.status === "present"
+                                  ).length;
+                                  const partial = records.filter(
+                                    (r) => r.status === "half-day"
+                                  ).length;
+
+                                  return (
+                                    Math.round(
+                                      ((present + partial * 0.5) /
+                                        records.length) *
+                                        100
+                                    ) + "%"
+                                  );
+                                })()}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Student Records Table */}
+                    <div className="overflow-x-auto rounded-md border border-gray-800">
+                      <Table>
+                        <TableHeader className="bg-gray-900">
+                          <TableRow>
+                            <TableHead className="text-left">Date</TableHead>
+                            <TableHead className="text-left">
+                              Check In
+                            </TableHead>
+                            <TableHead className="text-left">
+                              Check Out
+                            </TableHead>
+                            <TableHead className="text-left">
+                              Duration
+                            </TableHead>
+                            <TableHead className="text-left">
+                              Status
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredRecords
+                            .filter(
+                              (record) =>
+                                record.testUserId === selectedStudent
+                            )
+                            .slice(0, 10)
+                            .map((record) => (
+                              <TableRow
+                                key={record._id}
+                                className="hover:bg-gray-900/50"
+                              >
+                                <TableCell>
+                                  {new Date(record.date).toLocaleDateString()}
+                                </TableCell>
+                                <TableCell>
+                                  {formatTime(record.checkInTime)}
+                                </TableCell>
+                                <TableCell>
+                                  {record.checkOutTime
+                                    ? formatTime(record.checkOutTime)
+                                    : "Not checked out"}
+                                </TableCell>
+                                <TableCell>
+                                  {record.duration
+                                    ? `${Math.floor(record.duration / 60)}h ${
+                                        record.duration % 60
+                                      }m`
+                                    : "N/A"}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      record.status === "present"
+                                        ? "bg-green-900/20 text-green-400 border-green-500/30"
+                                        : record.status === "half-day"
+                                        ? "bg-amber-900/20 text-amber-400 border-amber-500/30"
+                                        : "bg-red-900/20 text-red-400 border-red-500/30"
+                                    }
+                                  >
+                                    {record.status === "present"
+                                      ? "Present"
+                                      : record.status === "half-day"
+                                      ? "Partial"
+                                      : "Absent"}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <Alert className="bg-gray-900/40 border-purple-500/30">
+                      <AlertTriangle className="h-4 w-4 text-purple-500" />
+                      <AlertTitle className="text-white">
+                        No student selected
+                      </AlertTitle>
+                      <AlertDescription className="text-gray-400">
+                        Please select a student from the dropdown to view
+                        their detailed attendance report.
+                      </AlertDescription>
+                    </Alert>
+
+                    {/* Summary Cards for All Students */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                      <Card className="bg-black border-purple-500/30">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-gray-400">
+                            Average Attendance Rate
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-col gap-2">
+                            <div className="text-2xl font-bold text-white">
+                              {(() => {
+                                const totalRecords = attendanceRecords.length;
+                                if (totalRecords === 0) return "0%";
+
+                                const presentCount = attendanceRecords.filter(
+                                  (r) => r.status === "present"
+                                ).length;
+                                const partialCount = attendanceRecords.filter(
+                                  (r) => r.status === "half-day"
+                                ).length;
+
+                                return (
+                                  Math.round(
+                                    ((presentCount + partialCount * 0.5) /
+                                      totalRecords) *
+                                      100
+                                  ) + "%"
+                                );
+                              })()}
+                            </div>
+                            <Progress
+                              value={(() => {
+                                const totalRecords = attendanceRecords.length;
+                                if (totalRecords === 0) return 0;
+
+                                const presentCount = attendanceRecords.filter(
+                                  (r) => r.status === "present"
+                                ).length;
+                                const partialCount = attendanceRecords.filter(
+                                  (r) => r.status === "half-day"
+                                ).length;
+
+                                return (
+                                  ((presentCount + partialCount * 0.5) /
+                                    totalRecords) *
+                                  100
+                                );
+                              })()}
+                              className="h-2"
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="bg-black border-purple-500/30">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-gray-400">
+                            Students with 100% Attendance
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-white">
+                            {(() => {
+                              const uniqueStudentIds = [
+                                ...new Set(
+                                  attendanceRecords.map((r) => r.testUserId)
+                                ),
+                              ];
+
+                              let perfectAttendanceCount = 0;
+
+                              uniqueStudentIds.forEach((id) => {
+                                const studentRecords =
+                                  attendanceRecords.filter(
+                                    (r) => r.testUserId === id
+                                  );
+                                const allPresent = studentRecords.every(
+                                  (r) => r.status === "present"
+                                );
+
+                                if (allPresent && studentRecords.length > 0) {
+                                  perfectAttendanceCount++;
+                                }
+                              });
+
+                              return perfectAttendanceCount;
+                            })()}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="bg-black border-purple-500/30">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-gray-400">
+                            Average Duration
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-white">
+                            {(() => {
+                              const recordsWithDuration =
+                                attendanceRecords.filter((r) => r.duration);
+
+                              if (recordsWithDuration.length === 0)
+                                return "0h 0m";
+
+                              const totalDuration =
+                                recordsWithDuration.reduce(
+                                  (sum, record) =>
+                                    sum + (record.duration || 0),
+                                  0
+                                );
+                              const avgDuration =
+                                totalDuration / recordsWithDuration.length;
+
+                              return `${Math.floor(
+                                avgDuration / 60
+                              )}h ${Math.round(avgDuration % 60)}m`;
+                            })()}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Students List */}
+                    <div className="mt-6">
+                      <h3 className="text-lg font-semibold mb-4">
+                        All Students
+                      </h3>
+                      <div className="overflow-x-auto rounded-md border border-gray-800">
+                        <Table>
+                          <TableHeader className="bg-gray-900">
+                            <TableRow>
+                              <TableHead className="text-left">
+                                Student
+                              </TableHead>
+                              <TableHead className="text-left">
+                                Campus
+                              </TableHead>
+                              <TableHead className="text-left">
+                                Branch
+                              </TableHead>
+                              <TableHead className="text-left">
+                                Present
+                              </TableHead>
+                              <TableHead className="text-left">
+                                Partial
+                              </TableHead>
+                              <TableHead className="text-left">
+                                Absent
+                              </TableHead>
+                              <TableHead className="text-left">
+                                Rate
+                              </TableHead>
+                              <TableHead className="text-left">
+                                Actions
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {students
+                              .filter(student => campusFilter === "all" || 
+                                student.campus?.toLowerCase() === campusFilter.toLowerCase())
+                              .slice(0, 10).map((student) => {
+                              const studentRecords = attendanceRecords.filter(
+                                (r) => r.testUserId === student._id
+                              );
+                              const presentCount = studentRecords.filter(
+                                (r) => r.status === "present"
+                              ).length;
+                              const partialCount = studentRecords.filter(
+                                (r) => r.status === "half-day"
+                              ).length;
+                              const absentCount = studentRecords.filter(
+                                (r) => r.status === "absent"
+                              ).length;
+
+                              const totalCount =
+                                presentCount + partialCount + absentCount;
+                              const attendanceRate =
+                                totalCount > 0
+                                  ? Math.round(
+                                      ((presentCount + partialCount * 0.5) /
+                                        totalCount) *
+                                        100
+                                    )
+                                  : 0;
+
+                              return (
+                                <TableRow
+                                  key={student._id}
+                                  className="hover:bg-gray-900/50"
+                                >
+                                  <TableCell className="font-medium">
+                                    <div className="flex items-center">
+                                      <Avatar className="h-8 w-8 mr-2">
+                                        <AvatarFallback>
+                                          {student.name.charAt(0)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div>
+                                        <div className="font-medium">
+                                          {student.name}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          {student.regno || student.email}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    {student.campus || "N/A"}
+                                  </TableCell>
+                                  <TableCell>
+                                    {student.branch || "N/A"}
+                                  </TableCell>
+                                  <TableCell className="text-green-400">
+                                    {presentCount}
+                                  </TableCell>
+                                  <TableCell className="text-amber-400">
+                                    {partialCount}
+                                  </TableCell>
+                                  <TableCell className="text-red-400">
+                                    {absentCount}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2">
+                                      <Progress
+                                        value={attendanceRate}
+                                        className="h-2 w-[60px]"
+                                      />
+                                      <span className="text-sm">
+                                        {attendanceRate}%
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() =>
+                                        setSelectedStudent(student._id)
+                                      }
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Analytics Tab */}
+          <TabsContent value="analytics" className="space-y-4">
+            <Card className="bg-black border-purple-500/30">
+              <CardHeader>
+                <CardTitle>Attendance Analytics</CardTitle>
+                <CardDescription>
+                  Visualize attendance patterns by campus
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-8">
+                  {/* Period Selector */}
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-semibold">
+                      Attendance Overview
+                    </h3>
                     <Select
                       value={currentView}
                       onValueChange={(value) =>
@@ -1161,647 +2257,131 @@ export default function AttendanceAdminDashboard() {
                     </Select>
                   </div>
 
-                  {selectedStudent ? (
-                    <div className="space-y-6">
-                      {/* Student Profile */}
-                      {students.find((s) => s._id === selectedStudent) && (
-                        <div className="flex flex-col md:flex-row items-center md:items-start gap-6 p-4 bg-gray-900/20 rounded-lg border border-gray-800">
-                          <Avatar className="h-20 w-20">
-                            <AvatarFallback>
-                              {students
-                                .find((s) => s._id === selectedStudent)
-                                ?.name.charAt(0) || "S"}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="space-y-2 text-center md:text-left">
-                            <h3 className="text-xl font-semibold">
-                              {students.find((s) => s._id === selectedStudent)
-                                ?.name || "Selected Student"}
-                            </h3>
-                            <p className="text-gray-400">
-                              {students.find((s) => s._id === selectedStudent)
-                                ?.regno || ""}
-                            </p>
-                            <p className="text-gray-400">
-                              {students.find((s) => s._id === selectedStudent)
-                                ?.email || ""}
-                            </p>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              <Badge variant="secondary">
-                                {students.find((s) => s._id === selectedStudent)
-                                  ?.branch || "No Branch"}
-                              </Badge>
-                              <Badge variant="secondary">
-                                {students.find((s) => s._id === selectedStudent)
-                                  ?.campus || "No Campus"}
-                              </Badge>
-                            </div>
+                  {/* Campus comparison */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {/* BBSR Campus Stats */}
+                    <Card className="bg-gray-900/20 border border-purple-500/30">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center">
+                          <School className="h-5 w-5 mr-2 text-purple-500" />
+                          BBSR Campus
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Students:</span>
+                            <span className="font-medium">{stats.campusStats?.bbsr.totalStudents || 0}</span>
                           </div>
-                          <div className="flex-1 flex flex-col md:items-end">
-                            <div className="flex flex-col sm:flex-row gap-4">
-                              <div className="text-center p-3 bg-gray-900/30 rounded-lg">
-                                <div className="text-sm text-gray-400">
-                                  Present Days
-                                </div>
-                                <div className="text-2xl font-bold text-green-400">
-                                  {
-                                    filteredRecords.filter(
-                                      (r) =>
-                                        r.testUserId === selectedStudent &&
-                                        r.status === "present"
-                                    ).length
-                                  }
-                                </div>
-                              </div>
-                              <div className="text-center p-3 bg-gray-900/30 rounded-lg">
-                                <div className="text-sm text-gray-400">
-                                  Partial Days
-                                </div>
-                                <div className="text-2xl font-bold text-amber-400">
-                                  {
-                                    filteredRecords.filter(
-                                      (r) =>
-                                        r.testUserId === selectedStudent &&
-                                        r.status === "half-day"
-                                    ).length
-                                  }
-                                </div>
-                              </div>
-                              <div className="text-center p-3 bg-gray-900/30 rounded-lg">
-                                <div className="text-sm text-gray-400">
-                                  Absent Days
-                                </div>
-                                <div className="text-2xl font-bold text-red-400">
-                                  {
-                                    filteredRecords.filter(
-                                      (r) =>
-                                        r.testUserId === selectedStudent &&
-                                        r.status === "absent"
-                                    ).length
-                                  }
-                                </div>
-                              </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Present:</span>
+                            <span className="font-medium text-green-400">{stats.campusStats?.bbsr.presentToday || 0}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Partial:</span>
+                            <span className="font-medium text-amber-400">{stats.campusStats?.bbsr.partialToday || 0}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Absent:</span>
+                            <span className="font-medium text-red-400">{stats.campusStats?.bbsr.absentToday || 0}</span>
+                          </div>
+                          <div className="pt-2">
+                            <div className="flex justify-between text-xs mb-1">
+                              <span>Attendance Rate</span>
+                              <span>{stats.campusStats?.bbsr.attendanceRate || 0}%</span>
                             </div>
-
-                            <div className="mt-4 w-full md:w-auto">
-                              <div className="text-sm text-gray-400 mb-1">
-                                Attendance Rate
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Progress
-                                  value={(() => {
-                                    const records = filteredRecords.filter(
-                                      (r) => r.testUserId === selectedStudent
-                                    );
-                                    if (records.length === 0) return 0;
-
-                                    const present = records.filter(
-                                      (r) => r.status === "present"
-                                    ).length;
-                                    const partial = records.filter(
-                                      (r) => r.status === "half-day"
-                                    ).length;
-
-                                    return (
-                                      ((present + partial * 0.5) /
-                                        records.length) *
-                                      100
-                                    );
-                                  })()}
-                                  className="h-2 w-full md:w-[200px]"
-                                />
-                                <span className="text-sm font-medium">
-                                  {(() => {
-                                    const records = filteredRecords.filter(
-                                      (r) => r.testUserId === selectedStudent
-                                    );
-                                    if (records.length === 0) return "0%";
-
-                                    const present = records.filter(
-                                      (r) => r.status === "present"
-                                    ).length;
-                                    const partial = records.filter(
-                                      (r) => r.status === "half-day"
-                                    ).length;
-
-                                    return (
-                                      Math.round(
-                                        ((present + partial * 0.5) /
-                                          records.length) *
-                                          100
-                                      ) + "%"
-                                    );
-                                  })()}
-                                </span>
-                              </div>
-                            </div>
+                            <Progress value={stats.campusStats?.bbsr.attendanceRate || 0} className="h-2" />
                           </div>
                         </div>
-                      )}
+                      </CardContent>
+                    </Card>
 
-                      {/* Student Records Table */}
-                      <div className="overflow-x-auto rounded-md border border-gray-800">
-                        <Table>
-                          <TableHeader className="bg-gray-900">
-                            <TableRow>
-                              <TableHead className="text-left">Date</TableHead>
-                              <TableHead className="text-left">
-                                Check In
-                              </TableHead>
-                              <TableHead className="text-left">
-                                Check Out
-                              </TableHead>
-                              <TableHead className="text-left">
-                                Duration
-                              </TableHead>
-                              <TableHead className="text-left">
-                                Status
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredRecords
-                              .filter(
-                                (record) =>
-                                  record.testUserId === selectedStudent
-                              )
-                              .slice(0, 10)
-                              .map((record) => (
-                                <TableRow
-                                  key={record._id}
-                                  className="hover:bg-gray-900/50"
-                                >
-                                  <TableCell>
-                                    {new Date(record.date).toLocaleDateString()}
-                                  </TableCell>
-                                  <TableCell>
-                                    {formatTime(record.checkInTime)}
-                                  </TableCell>
-                                  <TableCell>
-                                    {record.checkOutTime
-                                      ? formatTime(record.checkOutTime)
-                                      : "Not checked out"}
-                                  </TableCell>
-                                  <TableCell>
-                                    {record.duration
-                                      ? `${Math.floor(record.duration / 60)}h ${
-                                          record.duration % 60
-                                        }m`
-                                      : "N/A"}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge
-                                      variant="outline"
-                                      className={
-                                        record.status === "present"
-                                          ? "bg-green-900/20 text-green-400 border-green-500/30"
-                                          : record.status === "half-day"
-                                          ? "bg-amber-900/20 text-amber-400 border-amber-500/30"
-                                          : "bg-red-900/20 text-red-400 border-red-500/30"
-                                      }
-                                    >
-                                      {record.status === "present"
-                                        ? "Present"
-                                        : record.status === "half-day"
-                                        ? "Partial"
-                                        : "Absent"}
-                                    </Badge>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <Alert className="bg-gray-900/40 border-purple-500/30">
-                        <AlertTriangle className="h-4 w-4 text-purple-500" />
-                        <AlertTitle className="text-white">
-                          No student selected
-                        </AlertTitle>
-                        <AlertDescription className="text-gray-400">
-                          Please select a student from the dropdown to view
-                          their detailed attendance report.
-                        </AlertDescription>
-                      </Alert>
-
-                      {/* Summary Cards for All Students */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                        <Card className="bg-black border-purple-500/30">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-400">
-                              Average Attendance Rate
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="flex flex-col gap-2">
-                              <div className="text-2xl font-bold text-white">
-                                {(() => {
-                                  const totalRecords = attendanceRecords.length;
-                                  if (totalRecords === 0) return "0%";
-
-                                  const presentCount = attendanceRecords.filter(
-                                    (r) => r.status === "present"
-                                  ).length;
-                                  const partialCount = attendanceRecords.filter(
-                                    (r) => r.status === "half-day"
-                                  ).length;
-
-                                  return (
-                                    Math.round(
-                                      ((presentCount + partialCount * 0.5) /
-                                        totalRecords) *
-                                        100
-                                    ) + "%"
-                                  );
-                                })()}
-                              </div>
-                              <Progress
-                                value={(() => {
-                                  const totalRecords = attendanceRecords.length;
-                                  if (totalRecords === 0) return 0;
-
-                                  const presentCount = attendanceRecords.filter(
-                                    (r) => r.status === "present"
-                                  ).length;
-                                  const partialCount = attendanceRecords.filter(
-                                    (r) => r.status === "half-day"
-                                  ).length;
-
-                                  return (
-                                    ((presentCount + partialCount * 0.5) /
-                                      totalRecords) *
-                                    100
-                                  );
-                                })()}
-                                className="h-2"
-                              />
+                    {/* PKD Campus Stats */}
+                    <Card className="bg-gray-900/20 border border-purple-500/30">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center">
+                          <School className="h-5 w-5 mr-2 text-purple-500" />
+                          PKD Campus
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Students:</span>
+                            <span className="font-medium">{stats.campusStats?.pkd.totalStudents || 0}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Present:</span>
+                            <span className="font-medium text-green-400">{stats.campusStats?.pkd.presentToday || 0}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Partial:</span>
+                            <span className="font-medium text-amber-400">{stats.campusStats?.pkd.partialToday || 0}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Absent:</span>
+                            <span className="font-medium text-red-400">{stats.campusStats?.pkd.absentToday || 0}</span>
+                          </div>
+                          <div className="pt-2">
+                            <div className="flex justify-between text-xs mb-1">
+                              <span>Attendance Rate</span>
+                              <span>{stats.campusStats?.pkd.attendanceRate || 0}%</span>
                             </div>
-                          </CardContent>
-                        </Card>
-
-                        <Card className="bg-black border-purple-500/30">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-400">
-                              Students with 100% Attendance
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="text-2xl font-bold text-white">
-                              {(() => {
-                                const uniqueStudentIds = [
-                                  ...new Set(
-                                    attendanceRecords.map((r) => r.testUserId)
-                                  ),
-                                ];
-
-                                let perfectAttendanceCount = 0;
-
-                                uniqueStudentIds.forEach((id) => {
-                                  const studentRecords =
-                                    attendanceRecords.filter(
-                                      (r) => r.testUserId === id
-                                    );
-                                  const allPresent = studentRecords.every(
-                                    (r) => r.status === "present"
-                                  );
-
-                                  if (allPresent && studentRecords.length > 0) {
-                                    perfectAttendanceCount++;
-                                  }
-                                });
-
-                                return perfectAttendanceCount;
-                              })()}
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        <Card className="bg-black border-purple-500/30">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-400">
-                              Average Duration
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="text-2xl font-bold text-white">
-                              {(() => {
-                                const recordsWithDuration =
-                                  attendanceRecords.filter((r) => r.duration);
-
-                                if (recordsWithDuration.length === 0)
-                                  return "0h 0m";
-
-                                const totalDuration =
-                                  recordsWithDuration.reduce(
-                                    (sum, record) =>
-                                      sum + (record.duration || 0),
-                                    0
-                                  );
-                                const avgDuration =
-                                  totalDuration / recordsWithDuration.length;
-
-                                return `${Math.floor(
-                                  avgDuration / 60
-                                )}h ${Math.round(avgDuration % 60)}m`;
-                              })()}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-
-                      {/* Students List */}
-                      <div className="mt-6">
-                        <h3 className="text-lg font-semibold mb-4">
-                          All Students
-                        </h3>
-                        <div className="overflow-x-auto rounded-md border border-gray-800">
-                          <Table>
-                            <TableHeader className="bg-gray-900">
-                              <TableRow>
-                                <TableHead className="text-left">
-                                  Student
-                                </TableHead>
-                                <TableHead className="text-left">
-                                  Campus
-                                </TableHead>
-                                <TableHead className="text-left">
-                                  Branch
-                                </TableHead>
-                                <TableHead className="text-left">
-                                  Present
-                                </TableHead>
-                                <TableHead className="text-left">
-                                  Partial
-                                </TableHead>
-                                <TableHead className="text-left">
-                                  Absent
-                                </TableHead>
-                                <TableHead className="text-left">
-                                  Rate
-                                </TableHead>
-                                <TableHead className="text-left">
-                                  Actions
-                                </TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {students.slice(0, 10).map((student) => {
-                                const studentRecords = attendanceRecords.filter(
-                                  (r) => r.testUserId === student._id
-                                );
-                                const presentCount = studentRecords.filter(
-                                  (r) => r.status === "present"
-                                ).length;
-                                const partialCount = studentRecords.filter(
-                                  (r) => r.status === "half-day"
-                                ).length;
-                                const absentCount = studentRecords.filter(
-                                  (r) => r.status === "absent"
-                                ).length;
-
-                                const totalCount =
-                                  presentCount + partialCount + absentCount;
-                                const attendanceRate =
-                                  totalCount > 0
-                                    ? Math.round(
-                                        ((presentCount + partialCount * 0.5) /
-                                          totalCount) *
-                                          100
-                                      )
-                                    : 0;
-
-                                return (
-                                  <TableRow
-                                    key={student._id}
-                                    className="hover:bg-gray-900/50"
-                                  >
-                                    <TableCell className="font-medium">
-                                      <div className="flex items-center">
-                                        <Avatar className="h-8 w-8 mr-2">
-                                          <AvatarFallback>
-                                            {student.name.charAt(0)}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <div>
-                                          <div className="font-medium">
-                                            {student.name}
-                                          </div>
-                                          <div className="text-xs text-gray-500">
-                                            {student.regno || student.email}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      {student.campus || "N/A"}
-                                    </TableCell>
-                                    <TableCell>
-                                      {student.branch || "N/A"}
-                                    </TableCell>
-                                    <TableCell className="text-green-400">
-                                      {presentCount}
-                                    </TableCell>
-                                    <TableCell className="text-amber-400">
-                                      {partialCount}
-                                    </TableCell>
-                                    <TableCell className="text-red-400">
-                                      {absentCount}
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex items-center gap-2">
-                                        <Progress
-                                          value={attendanceRate}
-                                          className="h-2 w-[60px]"
-                                        />
-                                        <span className="text-sm">
-                                          {attendanceRate}%
-                                        </span>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() =>
-                                          setSelectedStudent(student._id)
-                                        }
-                                      >
-                                        <Eye className="h-4 w-4" />
-                                      </Button>
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
+                            <Progress value={stats.campusStats?.pkd.attendanceRate || 0} className="h-2" />
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+                      </CardContent>
+                    </Card>
 
-            {/* Analytics Tab */}
-            <TabsContent value="analytics" className="space-y-4">
-              <Card className="bg-black border-purple-500/30">
-                <CardHeader>
-                  <CardTitle>Attendance Analytics</CardTitle>
-                  <CardDescription>
-                    Visualize attendance patterns and trends
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-8">
-                    {/* Period Selector */}
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-lg font-semibold">
-                        Attendance Overview
-                      </h3>
-                      <Select
-                        value={currentView}
-                        onValueChange={(value) =>
-                          setCurrentView(value as "day" | "week" | "month")
-                        }
-                      >
-                        <SelectTrigger className="w-[150px] bg-gray-900 border-gray-700 text-white">
-                          <SelectValue placeholder="Period" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-900 border-gray-700 text-white">
-                          <SelectItem value="day">Day</SelectItem>
-                          <SelectItem value="week">Week</SelectItem>
-                          <SelectItem value="month">Month</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    {/* VZM Campus Stats */}
+                    <Card className="bg-gray-900/20 border border-purple-500/30">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center">
+                          <School className="h-5 w-5 mr-2 text-purple-500" />
+                          VZM Campus
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Students:</span>
+                            <span className="font-medium">{stats.campusStats?.vzm.totalStudents || 0}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Present:</span>
+                            <span className="font-medium text-green-400">{stats.campusStats?.vzm.presentToday || 0}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Partial:</span>
+                            <span className="font-medium text-amber-400">{stats.campusStats?.vzm.partialToday || 0}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Absent:</span>
+                              <span className="font-medium text-red-400">{stats.campusStats?.vzm.absentToday || 0}</span>
+                            </div>
+                            <div className="pt-2">
+                              <div className="flex justify-between text-xs mb-1">
+                                <span>Attendance Rate</span>
+                                <span>{stats.campusStats?.vzm.attendanceRate || 0}%</span>
+                              </div>
+                              <Progress value={stats.campusStats?.vzm.attendanceRate || 0} className="h-2" />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
 
-                    {/* Daily Chart Placeholder */}
+                    {/* Campus attendance bar chart placeholder */}
                     <div className="p-4 border border-gray-800 rounded-lg h-[300px] flex flex-col justify-center items-center bg-gray-900/20">
                       <BarChart4 className="h-16 w-16 text-purple-500/20 mb-4" />
                       <p className="text-center text-gray-400">
-                        The attendance chart would be displayed here using a
-                        charting library like Recharts.
+                        Campus attendance comparison chart would be displayed here.
                         <br />
-                        We can visualize attendance trends over time.
+                        This visualizes attendance rates across different campuses.
                       </p>
                     </div>
 
-                    {/* Attendance Breakdown */}
-                    <div>
-                      <h3 className="text-lg font-semibold mb-4">
-                        Attendance Breakdown
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Card className="bg-black border-green-500/30">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-400">
-                              Present
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="flex items-center justify-between">
-                              <div className="text-2xl font-bold text-green-400">
-                                {(() => {
-                                  const presentCount = filteredRecords.filter(
-                                    (r) => r.status === "present"
-                                  ).length;
-                                  return presentCount;
-                                })()}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {(() => {
-                                  const totalRecords = filteredRecords.length;
-                                  if (totalRecords === 0) return "0%";
-
-                                  const presentCount = filteredRecords.filter(
-                                    (r) => r.status === "present"
-                                  ).length;
-                                  return (
-                                    Math.round(
-                                      (presentCount / totalRecords) * 100
-                                    ) + "%"
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        <Card className="bg-black border-amber-500/30">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-400">
-                              Partial
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="flex items-center justify-between">
-                              <div className="text-2xl font-bold text-amber-400">
-                                {(() => {
-                                  const partialCount = filteredRecords.filter(
-                                    (r) => r.status === "half-day"
-                                  ).length;
-                                  return partialCount;
-                                })()}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {(() => {
-                                  const totalRecords = filteredRecords.length;
-                                  if (totalRecords === 0) return "0%";
-
-                                  const partialCount = filteredRecords.filter(
-                                    (r) => r.status === "half-day"
-                                  ).length;
-                                  return (
-                                    Math.round(
-                                      (partialCount / totalRecords) * 100
-                                    ) + "%"
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        <Card className="bg-black border-red-500/30">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-400">
-                              Absent
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="flex items-center justify-between">
-                              <div className="text-2xl font-bold text-red-400">
-                                {(() => {
-                                  const absentCount = filteredRecords.filter(
-                                    (r) => r.status === "absent"
-                                  ).length;
-                                  return absentCount;
-                                })()}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {(() => {
-                                  const totalRecords = filteredRecords.length;
-                                  if (totalRecords === 0) return "0%";
-
-                                  const absentCount = filteredRecords.filter(
-                                    (r) => r.status === "absent"
-                                  ).length;
-                                  return (
-                                    Math.round(
-                                      (absentCount / totalRecords) * 100
-                                    ) + "%"
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    </div>
-
-                    {/* Attendance Trends */}
+                    {/* Weekly Trends */}
                     <div>
                       <h3 className="text-lg font-semibold mb-4">
                         Weekly Trends
@@ -1812,7 +2392,7 @@ export default function AttendanceAdminDashboard() {
                           Weekly attendance trends would be visualized here.
                           <br />
                           This chart would show attendance patterns throughout
-                          the week.
+                          the week for each campus.
                         </p>
                       </div>
                     </div>
@@ -1826,7 +2406,7 @@ export default function AttendanceAdminDashboard() {
                         <BarChart4 className="h-16 w-16 text-purple-500/20 mb-4" />
                         <p className="text-center text-gray-400">
                           This chart would show the distribution of check-in and
-                          check-out times.
+                          check-out times per campus.
                           <br />
                           It helps identify popular times and potential
                           bottlenecks.
