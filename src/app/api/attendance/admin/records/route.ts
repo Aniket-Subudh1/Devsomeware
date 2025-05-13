@@ -3,6 +3,7 @@ import ConnectDb from "@/middleware/connectDb";
 import Attendance from "@/models/Attendance";
 import TestUsers from "@/models/TestUsers";
 import StudentSession from "@/models/StudentSession";
+import AttendanceSettings from "@/models/AttendanceSettings";
 import jwt from "jsonwebtoken";
 
 interface DecodedToken {
@@ -10,7 +11,12 @@ interface DecodedToken {
   id: string;
 }
 
-
+interface StudentUser {
+  _id: string;
+  email: string;
+  campus?: string;
+  [key: string]: unknown;
+}
 
 // Handle POST requests for QR code attendance recording
 export async function POST(req: NextRequest) {
@@ -35,7 +41,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
-    const { token, qrData, email, deviceId, type } = data || {};
+    const { token, qrData, email, deviceId, type, studentLocation } = data || {};
     
     if (!token || !qrData || !email || !deviceId || !type) {
       return NextResponse.json({
@@ -63,9 +69,8 @@ export async function POST(req: NextRequest) {
     
     const currentTime = Math.floor(Date.now() / 1000);
     
-    // Check if QR code has a timestamp and validate it was generated very recently
-    const qrTimestamp = qrPayload.timestamp || 0;
-    const expiresAt = qrPayload.expiresAt || (qrTimestamp + 10); // Default to 10 seconds if no expiresAt
+    // Check if QR code has a timestamp and validate expiration
+    const expiresAt = qrPayload.expiresAt || (qrPayload.timestamp + 10); // Default to 10 seconds if no expiresAt
     
     // Ensure QR code is not expired
     if (currentTime > expiresAt) {
@@ -87,6 +92,62 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
+    // Get current attendance settings
+    const settingsQuery = await AttendanceSettings.findOne({}).lean();
+    const settings = Array.isArray(settingsQuery) ? settingsQuery[0] : settingsQuery || { 
+      geoLocationEnabled: false, 
+      defaultRadius: 50 
+    };
+    
+    // Verify geolocation if enabled
+    if (settings.geoLocationEnabled && qrPayload.geoRequired) {
+      // If geolocation is required but not provided by the student
+      if (!studentLocation || !studentLocation.latitude || !studentLocation.longitude) {
+        return NextResponse.json({
+          success: false,
+          message: "Location access is required for attendance. Please enable location and try again."
+        }, { status: 400 });
+      }
+      
+      // If QR has location data, verify student's location is within allowed radius
+      if (qrPayload.location) {
+        const distance = calculateDistance(
+          studentLocation.latitude,
+          studentLocation.longitude,
+          qrPayload.location.latitude,
+          qrPayload.location.longitude
+        );
+        
+        const allowedRadius = qrPayload.location.radius || settings.defaultRadius || 50;
+        
+        if (distance > allowedRadius) {
+          // Log the location mismatch
+          console.warn(`[LOCATION] Student ${email} attempted attendance from ${distance.toFixed(1)}m away, outside the ${allowedRadius}m radius`);
+          
+          return NextResponse.json({
+            success: false,
+            message: `You must be within ${allowedRadius} meters of the classroom to record attendance. You are approximately ${Math.round(distance)}m away.`
+          }, { status: 403 });
+        }
+        
+        // If campus is specified in QR, verify student belongs to that campus
+        if (qrPayload.location.campus) {
+          const student = await TestUsers.findOne({ email }).lean();
+          
+          // Check if student is an object and has a campus property
+          if (student && !Array.isArray(student) && 'campus' in student && student.campus && student.campus.toLowerCase() !== qrPayload.location.campus.toLowerCase()) {
+            // Log the campus mismatch
+            console.warn(`[CAMPUS] Student ${email} from campus ${student.campus} attempted attendance for campus ${qrPayload.location.campus}`);
+            
+            return NextResponse.json({
+              success: false,
+              message: `This attendance QR is for ${qrPayload.location.campus.toUpperCase()} campus. You are registered for ${student.campus.toUpperCase()} campus.`
+            }, { status: 403 });
+          }
+        }
+      }
+    }
+    
     // Verify token and get student info
     let decoded: DecodedToken;
     try {
@@ -98,11 +159,8 @@ export async function POST(req: NextRequest) {
       }, { status: 401 });
     }
     
- 
     if (decoded.email !== email) {
-     
       console.warn(`[SECURITY] Token email mismatch: token ${decoded.email} vs request ${email}`);
-      
       return NextResponse.json({
         success: false,
         message: "Token email mismatch"
@@ -110,7 +168,7 @@ export async function POST(req: NextRequest) {
     }
     
     // Check if student exists
-    const student = await TestUsers.findOne({ email }).lean() as { _id: string; [key: string]: any } | null;
+    const student = await TestUsers.findOne({ email }).lean() as StudentUser | null;
     if (!student) {
       return NextResponse.json({
         success: false,
@@ -138,9 +196,7 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
     
- 
     if (session.deviceId !== deviceId) {
-    
       console.warn(`[SECURITY] Device mismatch for ${email}: session ${session.deviceId} vs request ${deviceId}`);
       
       return NextResponse.json({
@@ -196,19 +252,21 @@ export async function POST(req: NextRequest) {
     }
     
     if (qrPayload.type === 'check-in') {
-  
       if (!attendanceRecord) {
-      
         attendanceRecord = new Attendance({
           email,
           testUserId: student._id,
           date: today,
           checkInTime: now,
           status: 'present',
-          lastAction: 'check-in'
+          lastAction: 'check-in',
+          location: studentLocation ? {
+            latitude: studentLocation.latitude,
+            longitude: studentLocation.longitude,
+            campus: qrPayload.location ? qrPayload.location.campus : null
+          } : null
         });
       } else if (attendanceRecord.checkInTime && attendanceRecord.checkOutTime) {
- 
         return NextResponse.json({
           success: true,
           message: "You have already completed your attendance for today",
@@ -217,7 +275,6 @@ export async function POST(req: NextRequest) {
           lastAction: 'complete'
         });
       } else if (attendanceRecord.lastAction === 'check-in') {
-      
         return NextResponse.json({
           success: true,
           message: "You are already checked in",
@@ -226,51 +283,64 @@ export async function POST(req: NextRequest) {
           lastAction: attendanceRecord.lastAction
         });
       } else {
-        // Update existing record with new check-in (after a check-out)attendanceRecord.checkInTime = now;
+        // Update existing record with new check-in (after a check-out)
+        attendanceRecord.checkInTime = now;
         attendanceRecord.lastAction = 'check-in';
         
-      
+        // Update location if provided
+        if (studentLocation) {
+          attendanceRecord.checkInLocation = {
+            latitude: studentLocation.latitude,
+            longitude: studentLocation.longitude,
+            campus: qrPayload.location ? qrPayload.location.campus : null
+          };
+        }
+        
         if (attendanceRecord.status === 'half-day') {
           attendanceRecord.status = 'present';
         }
       }
     } else if (qrPayload.type === 'check-out') {
+      if (!attendanceRecord || !attendanceRecord.checkInTime) {
+        return NextResponse.json({
+          success: false,
+          message: "You need to check in first"
+        }, { status: 400 });
+      }
+      
+      if (attendanceRecord.checkInTime && attendanceRecord.checkOutTime && attendanceRecord.lastAction === 'check-out') {
+        return NextResponse.json({
+          success: true,
+          message: "You have already completed your attendance for today",
+          lastCheckIn: attendanceRecord.checkInTime,
+          lastCheckOut: attendanceRecord.checkOutTime,
+          lastAction: 'complete'
+        });
+      }
+      
+      attendanceRecord.checkOutTime = now;
+      attendanceRecord.lastAction = 'check-out';
+      
+      // Update location if provided
+      if (studentLocation) {
+        attendanceRecord.checkOutLocation = {
+          latitude: studentLocation.latitude,
+          longitude: studentLocation.longitude,
+          campus: qrPayload.location ? qrPayload.location.campus : null
+        };
+      }
 
-  if (!attendanceRecord || !attendanceRecord.checkInTime) {
-    return NextResponse.json({
-      success: false,
-      message: "You need to check in first"
-    }, { status: 400 });
-  }
-  
-
-  if (attendanceRecord.checkInTime && attendanceRecord.checkOutTime && attendanceRecord.lastAction === 'check-out') {
-    return NextResponse.json({
-      success: true,
-      message: "You have already completed your attendance for today",
-      lastCheckIn: attendanceRecord.checkInTime,
-      lastCheckOut: attendanceRecord.checkOutTime,
-      lastAction: 'complete'
-    });
-  }
-  
- 
-  attendanceRecord.checkOutTime = now;
-  attendanceRecord.lastAction = 'check-out';
-  
-
-  const checkInTime = new Date(attendanceRecord.checkInTime).getTime();
-  const checkOutTime = now.getTime();
-  const durationMinutes = Math.round((checkOutTime - checkInTime) / 60000);
-  attendanceRecord.duration = durationMinutes;
-  
-  
-  if (durationMinutes < 240) { 
-    attendanceRecord.status = 'half-day';
-  } else {
-    attendanceRecord.status = 'present';
-  }
-}
+      const checkInTime = new Date(attendanceRecord.checkInTime).getTime();
+      const checkOutTime = now.getTime();
+      const durationMinutes = Math.round((checkOutTime - checkInTime) / 60000);
+      attendanceRecord.duration = durationMinutes;
+      
+      if (durationMinutes < 240) { 
+        attendanceRecord.status = 'half-day';
+      } else {
+        attendanceRecord.status = 'present';
+      }
+    }
     
     try {
       // Save attendance record
@@ -285,18 +355,21 @@ export async function POST(req: NextRequest) {
             scanHistory: qrPayload.nonce ? {
               nonce: qrPayload.nonce,
               timestamp: now,
-              action: qrPayload.type
+              action: qrPayload.type,
+              location: studentLocation || null
             } : {
               nonce: "legacy-" + Date.now(),
               timestamp: now,
-              action: qrPayload.type
+              action: qrPayload.type,
+              location: studentLocation || null
             },
             attendanceHistory: {
               date: today,
               checkInTime: attendanceRecord.checkInTime,
               checkOutTime: attendanceRecord.checkOutTime,
               duration: attendanceRecord.duration,
-              status: attendanceRecord.status
+              status: attendanceRecord.status,
+              location: studentLocation || null
             }
           },
           $inc: { totalAttendance: qrPayload.type === 'check-out' ? 1 : 0 }
@@ -326,334 +399,28 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET method - This is the method used by the dashboard
-export async function GET(req: NextRequest) {
-  try {
-    // Check for authentication
-    const adminPassword = req.nextUrl.searchParams.get('password');
-    
-    // Verify admin credentials
-    if (!adminPassword || adminPassword !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({
-        success: false,
-        message: "Unauthorized: Invalid admin credentials"
-      }, { status: 401 });
-    }
-    
-    await ConnectDb();
-    
-    // Get all students
-    const students = await TestUsers.find({}).lean() as unknown as Array<{ _id: string; email: string; campus?: string; [key: string]: string | number | boolean | object | undefined }>;
-    
-    // Get today's date range
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    const attendanceRecords = await Attendance.find({}).sort({ date: -1 }).lean();
-    
-    // Map student info to attendance records
-    const recordsWithStudents = attendanceRecords.map((record) => {
-      const student = students.find(s => 
-        s._id.toString() === (record.testUserId ? record.testUserId.toString() : '') || 
-        s.email === record.email
-      );
-      
-      return {
-        ...record,
-        student: student || null
-      };
-    });
-    
-    // Get today's check-ins and check-outs
-    const todayAttendance = attendanceRecords.filter(record => {
-      const recordDate = new Date(record.date);
-      return recordDate >= today && recordDate < tomorrow;
-    });
-    
-    const todayCheckins = todayAttendance.filter(record => record.checkInTime).length;
-    const todayCheckouts = todayAttendance.filter(record => record.checkOutTime).length;
-    
-    // Get unique attendees today (students who checked in)
-    const uniqueAttendeeEmails = new Set(todayAttendance.map(record => record.email));
-    const uniqueAttendeesToday = uniqueAttendeeEmails.size;
-    
-    // Count present and partial students
-    const presentToday = todayAttendance.filter(r => r.status === 'present').length;
-    const partialToday = todayAttendance.filter(r => r.status === 'half-day').length;
-    
-    // Calculate absent students
-    const presentStudentEmails = new Set(
-      todayAttendance.filter(record => record.checkInTime)
-        .map(record => record.email)
-    );
-    
-    const absentStudents = students.filter(
-      student => !presentStudentEmails.has(student.email)
-    );
-    
-    // Count students with complete attendance
-    const completeAttendance = todayAttendance.filter(
-      record => record.checkInTime && record.checkOutTime
-    ).length;
-    
-    // Calculate attendance rate
-    const attendanceRate = students.length > 0 
-      ? Math.round(((presentToday + partialToday * 0.5) / students.length) * 100) 
-      : 0;
-    
-    // Get active sessions
-    const activeSessions = await StudentSession.find({ isActive: true }).lean();
-    
-    // Calculate average duration (for records with duration)
-    const recordsWithDuration = todayAttendance.filter(record => 
-      record.checkInTime && record.checkOutTime && record.duration
-    );
-    
-    const avgDuration = recordsWithDuration.length > 0
-      ? Math.round(recordsWithDuration.reduce((sum, record) => sum + (record.duration || 0), 0) / recordsWithDuration.length)
-      : 0;
-    
-    // Calculate weekly stats
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay()); 
-    
-    // Define interfaces for attendance statistics
-    interface CampusStatistics {
-      totalStudents: number;
-      presentToday: number;
-      absentToday: number;
-      partialToday: number;
-      attendanceRate: number;
-    }
-    
-    interface AttendanceStats {
-      totalStudents: number;
-      presentToday: number;
-      absentToday: number;
-      partialToday: number;
-      checkInsToday: number;
-      checkOutsToday: number;
-      activeSessions: number;
-      uniqueAttendees: number;
-      attendanceRate: number;
-      avgDuration: number;
-      weeklyAttendance: number[];
-      completeAttendance: number;
-      campusStats: {
-      bbsr: CampusStatistics;
-      pkd: CampusStatistics;
-      vzm: CampusStatistics;
-      };
-      monthlyAttendance: {
-      labels: string[];
-      present: number[];
-      absent: number[];
-      partial: number[];
-      };
-      latestCheckIns: Array<Record<string, any>>;
-    }
-    
-    const weeklyAttendance: number[] = [];
-    for (let i = 0; i < 7; i++) {
-      weeklyAttendance.push(0); 
-    }
-    
-    // Fill in weekly stats
-    attendanceRecords.forEach(record => {
-      const recordDate = new Date(record.date);
-      if (recordDate >= weekStart && recordDate < tomorrow) {
-        const dayOfWeek = recordDate.getDay(); 
-        if (record.checkInTime) {
-          weeklyAttendance[dayOfWeek]++;
-        }
-      }
-    });
-    
-  
-    const monthStart = new Date(today);
-    monthStart.setDate(1); 
-    
-    const labels = [];
-    const present = [];
-    const absent = [];
-    const partial = [];
-    
-    // Generate dates for the current month
-    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    
-    for (let i = 1; i <= daysInMonth; i++) {
-      const date = new Date(today.getFullYear(), today.getMonth(), i);
-      labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-      
-      // Filter records for this date
-      const dateStart = new Date(date);
-      dateStart.setHours(0, 0, 0, 0);
-      
-      const dateEnd = new Date(date);
-      dateEnd.setHours(23, 59, 59, 999);
-      
-      const dayRecords = attendanceRecords.filter(record => {
-        const recordDate = new Date(record.date);
-        return recordDate >= dateStart && recordDate < dateEnd;
-      });
-      
-      // Count unique students by status
-      const uniqueEmails = new Set();
-      dayRecords.forEach(record => uniqueEmails.add(record.email));
-      
-      // For each unique student on this day, determine their status
-      let presentCount = 0;
-      let partialCount = 0;
-      
-      uniqueEmails.forEach(email => {
-        const studentRecords = dayRecords.filter(r => r.email === email);
-        const hasPresent = studentRecords.some(r => r.status === 'present');
-        const hasPartial = studentRecords.some(r => r.status === 'half-day');
-        
-        if (hasPresent) {
-          presentCount++;
-        } else if (hasPartial) {
-          partialCount++;
-        }
-      });
-      
-      const absentCount = Math.max(0, students.length - (presentCount + partialCount));
-      
-      present.push(presentCount);
-      partial.push(partialCount);
-      absent.push(absentCount);
-    }
-    
-    // Campus-specific stats
-    const campusStats = {
-      bbsr: { totalStudents: 0, presentToday: 0, absentToday: 0, partialToday: 0, attendanceRate: 0 },
-      pkd: { totalStudents: 0, presentToday: 0, absentToday: 0, partialToday: 0, attendanceRate: 0 },
-      vzm: { totalStudents: 0, presentToday: 0, absentToday: 0, partialToday: 0, attendanceRate: 0 }
-    };
-    
-    // Count students by campus
-    students.forEach(student => {
-      const campus = (student.campus || '').toLowerCase();
-      if (campus === 'bbsr' || campus === 'pkd' || campus === 'vzm') {
-        campusStats[campus as keyof typeof campusStats].totalStudents++;
-      }
-    });
-    
-    // Get present students by campus
-    const presentStudentsByCampus = new Map<string, Set<string>>();
-    const partialStudentsByCampus = new Map<string, Set<string>>();
-    
-    // Initialize sets for each campus
-    ['bbsr', 'pkd', 'vzm'].forEach(campus => {
-      presentStudentsByCampus.set(campus, new Set<string>());
-      partialStudentsByCampus.set(campus, new Set<string>());
-    });
-    
-    // Process today's attendance records
-    todayAttendance.forEach(record => {
-      const student = students.find(s => 
-        s._id.toString() === (record.testUserId ? record.testUserId.toString() : '') || 
-        s.email === record.email
-      );
-      
-      if (student) {
-        const campus = (student.campus || '').toLowerCase();
-        if (campus === 'bbsr' || campus === 'pkd' || campus === 'vzm') {
-          if (record.status === 'present') {
-            presentStudentsByCampus.get(campus)?.add(record.email);
-          } else if (record.status === 'half-day') {
-            partialStudentsByCampus.get(campus)?.add(record.email);
-          }
-        }
-      }
-    });
-    
-    // Update campus stats with counts
-    ['bbsr', 'pkd', 'vzm'].forEach(campus => {
-      const key = campus as keyof typeof campusStats;
-      campusStats[key].presentToday = presentStudentsByCampus.get(campus)?.size || 0;
-      campusStats[key].partialToday = partialStudentsByCampus.get(campus)?.size || 0;
-      
-      // Calculate absent students
-      campusStats[key].absentToday = Math.max(
-        0, 
-        campusStats[key].totalStudents - (campusStats[key].presentToday + campusStats[key].partialToday)
-      );
-      
-      // Calculate attendance rate
-      campusStats[key].attendanceRate = campusStats[key].totalStudents > 0
-        ? Math.round(
-          ((campusStats[key].presentToday + campusStats[key].partialToday * 0.5) / 
-          campusStats[key].totalStudents) * 100
-        )
-        : 0;
-    });
-    
-    // Get recent check-ins for display
-    const latestCheckIns = await Attendance.find({
-      checkInTime: { $exists: true, $ne: null }
-    })
-    .sort({ checkInTime: -1 })
-    .limit(5)
-    .lean();
-    
-    // Join with student data
-    const latestCheckInsWithStudents = await Promise.all(
-      latestCheckIns.map(async (record) => {
-        const student = await TestUsers.findById(record.testUserId).lean();
-        return {
-          ...record,
-          student: student || { name: 'Unknown Student' }
-        };
-      })
-    );
-    
-    // Prepare stats object with all calculated data
-    const stats: AttendanceStats = {
-      totalStudents: students.length,
-      presentToday,
-      absentToday: students.length - uniqueAttendeesToday,
-      partialToday,
-      checkInsToday: todayCheckins,
-      checkOutsToday: todayCheckouts,
-      activeSessions: activeSessions.length,
-      uniqueAttendees: uniqueAttendeesToday,
-      attendanceRate,
-      avgDuration,
-      weeklyAttendance,
-      completeAttendance,
-      campusStats,
-      monthlyAttendance: {
-        labels,
-        present,
-        absent,
-        partial
-      },
-      latestCheckIns: latestCheckInsWithStudents
-    };
-    
-    // Return the combined response
-    return NextResponse.json({
-      success: true,
-      records: recordsWithStudents,
-      students,
-      absentStudents,
-      stats
-    });
-    
-  } catch (error) {
-    console.error("Error fetching dashboard data:", error);
-    return NextResponse.json({
-      success: false,
-      message: "Error fetching dashboard data"
-    }, { status: 500 });
-  }
+
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; 
+  const φ1 = lat1 * Math.PI / 180; 
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; 
 }
 
-// Helper endpoint for verifying a student's attendance
+export async function GET() {
+  return NextResponse.json({
+    success: true
+  });
+}
+
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,

@@ -31,7 +31,7 @@ export const Hero = () => {
         backgroundPosition: `center ${backgroundPositionY.get()}px`,
       }}
       animate={{
-        backgroundPositionX: ["0px", `${starsBg.width}px`], // Smooth infinite X movement
+        backgroundPositionX: ["0px", `${starsBg.width}px`], 
       }}
       transition={{
         duration: 60,

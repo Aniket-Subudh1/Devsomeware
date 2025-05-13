@@ -1,5 +1,28 @@
 import mongoose from "mongoose";
 
+const LocationSchema = new mongoose.Schema({
+    latitude: {
+        type: Number,
+        required: true
+    },
+    longitude: {
+        type: Number,
+        required: true
+    },
+    campus: {
+        type: String,
+        required: false
+    },
+    accuracy: {
+        type: Number,
+        required: false
+    },
+    timestamp: {
+        type: Date,
+        default: Date.now
+    }
+}, { _id: false });
+
 const StudentSessionSchema = new mongoose.Schema({
     email: {
         type: String,
@@ -56,6 +79,10 @@ const StudentSessionSchema = new mongoose.Schema({
             type: String,
             enum: ['check-in', 'check-out'],
             required: true
+        },
+        location: {
+            type: LocationSchema,
+            required: false
         }
     }],
     securityLogs: [{
@@ -75,6 +102,10 @@ const StudentSessionSchema = new mongoose.Schema({
         },
         deviceId: {
             type: String
+        },
+        location: {
+            type: LocationSchema,
+            required: false
         }
     }],
     attendanceHistory: [{
@@ -98,6 +129,10 @@ const StudentSessionSchema = new mongoose.Schema({
             type: String,
             enum: ['present', 'half-day', 'absent'],
             default: 'present'
+        },
+        location: {
+            type: LocationSchema,
+            required: false
         }
     }],
     blockedDevices: [{
