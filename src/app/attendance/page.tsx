@@ -21,10 +21,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useRouter } from "next/navigation";
+
 import { TbLockPassword } from "react-icons/tb";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useRouter } from "next/navigation";
+
 interface StudentInfo {
   name?: string;
   email?: string;
@@ -36,6 +38,10 @@ interface StudentInfo {
 }
 
 export default function StudentScanner() {
+
+   const router = useRouter();
+
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,7 +49,7 @@ export default function StudentScanner() {
   const [scannerLoading, setScannerLoading] = useState(false);
   const [sessionToken, setSessionToken] = useState("");
   const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null);
-  const router = useRouter();
+ 
   const [attendanceStatus, setAttendanceStatus] = useState<{
     lastCheckIn: string | null;
     lastCheckOut: string | null;
