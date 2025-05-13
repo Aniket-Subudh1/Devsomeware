@@ -21,9 +21,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { TbLockPassword } from "react-icons/tb";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-
+import { useRouter } from "next/navigation";
 interface StudentInfo {
   name?: string;
   email?: string;
@@ -42,6 +43,7 @@ export default function StudentScanner() {
   const [scannerLoading, setScannerLoading] = useState(false);
   const [sessionToken, setSessionToken] = useState("");
   const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null);
+  const router = useRouter();
   const [attendanceStatus, setAttendanceStatus] = useState<{
     lastCheckIn: string | null;
     lastCheckOut: string | null;
@@ -1017,32 +1019,19 @@ export default function StudentScanner() {
                 </AlertDescription>
               </Alert>
 
-              {/* <div className="flex w-full space-x-2">
+              <div className="flex w-full space-x-2">
                 <Button
                   className="flex-1 bg-green-600 hover:bg-green-700"
                   onClick={() => {
-                    setScannerActive(false);
-                    setScanError(null);
-                    setTimeout(() => setScannerActive(true), 500);
+                   router.push("/training/reset");
                   }}
                   disabled={scannerActive || scannerLoading}
                 >
-                  <UserCheck className="h-4 w-4 mr-2" />
-                  Check In
+                  <TbLockPassword className="h-4 w-4 mr-2" />
+                  Reset Your Password
                 </Button>
-                <Button
-                  className="flex-1 bg-blue-600 hover:bg-blue-700"
-                  onClick={() => {
-                    setScannerActive(false);
-                    setScanError(null);
-                    setTimeout(() => setScannerActive(true), 500);
-                  }}
-                  disabled={scannerActive || scannerLoading}
-                >
-                  <UserX className="h-4 w-4 mr-2" />
-                  Check Out
-                </Button>
-              </div> */}
+               
+              </div>
             </CardContent>
             <CardFooter className="text-center text-xs text-gray-500">
               <p>
