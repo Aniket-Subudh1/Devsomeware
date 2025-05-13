@@ -734,7 +734,7 @@ export default function AttendanceAdminDashboard() {
           `"${checkIn}"`,
           `"${checkOut}"`,
           `"${duration}"`,
-          `"${status}"`
+          `"${status}"`,
         ];
 
         csvContent += escapedRow.join(",") + "\n";
@@ -756,7 +756,7 @@ export default function AttendanceAdminDashboard() {
               `"N/A"`, // No check-in
               `"N/A"`, // No check-out
               `"0"`, // Duration
-              `"absent"`
+              `"absent"`,
             ];
 
             csvContent += escapedRow.join(",") + "\n";
@@ -797,38 +797,38 @@ export default function AttendanceAdminDashboard() {
     try {
       // Show loading toast
       toast.loading("Preparing Excel export...");
-      
+
       // Dynamically import xlsx
-      const XLSX = await import('xlsx');
-      
+      const XLSX = await import("xlsx");
+
       // Create a new workbook
       const workbook = XLSX.utils.book_new();
-      
+
       // Create a worksheet for each campus
       const campuses = ["bbsr", "pkd", "vzm"];
       let allRecordsWorksheet = null;
-      
+
       // First, create the "All Campuses" worksheet
       if (campusFilter === "all") {
         const allData: {
-          "Campus": string;
-          "Date": string;
-          "Name": string;
-          "Email": string;
+          Campus: string;
+          Date: string;
+          Name: string;
+          Email: string;
           "Registration Number": string;
           "Check In": string;
           "Check Out": string;
           "Duration (mins)": string;
-          "Status": string;
+          Status: string;
         }[] = [];
-        
+
         // Add records for all campuses
         filteredRecords.forEach((record) => {
           allData.push({
-            "Campus": record.student?.campus || "Unknown",
-            "Date": new Date(record.date).toLocaleDateString(),
-            "Name": record.student?.name || "Unknown",
-            "Email": record.email,
+            Campus: record.student?.campus || "Unknown",
+            Date: new Date(record.date).toLocaleDateString(),
+            Name: record.student?.name || "Unknown",
+            Email: record.email,
             "Registration Number": record.student?.regno || "N/A",
             "Check In": record.checkInTime
               ? new Date(record.checkInTime).toLocaleTimeString()
@@ -837,52 +837,58 @@ export default function AttendanceAdminDashboard() {
               ? new Date(record.checkOutTime).toLocaleTimeString()
               : "N/A",
             "Duration (mins)": record.duration?.toString() || "0",
-            "Status": record.status
+            Status: record.status,
           });
         });
-        
+
         // Add absent students
         absentStudents.forEach((student) => {
           allData.push({
-            "Campus": student.campus || "Unknown",
-            "Date": new Date().toLocaleDateString(),
-            "Name": student.name || "Unknown",
-            "Email": student.email,
+            Campus: student.campus || "Unknown",
+            Date: new Date().toLocaleDateString(),
+            Name: student.name || "Unknown",
+            Email: student.email,
             "Registration Number": student.regno || "N/A",
             "Check In": "N/A",
             "Check Out": "N/A",
             "Duration (mins)": "0",
-            "Status": "absent"
+            Status: "absent",
           });
         });
-        
+
         // Create worksheet with all data
         allRecordsWorksheet = XLSX.utils.json_to_sheet(allData);
-        XLSX.utils.book_append_sheet(workbook, allRecordsWorksheet, "All Campuses");
+        XLSX.utils.book_append_sheet(
+          workbook,
+          allRecordsWorksheet,
+          "All Campuses"
+        );
       }
-      
+
       // Create separate worksheet for each campus if we're looking at all campuses
       if (campusFilter === "all") {
         campuses.forEach((campus) => {
           const campusData: {
-            "Date": string;
-            "Name": string;
-            "Email": string;
+            Date: string;
+            Name: string;
+            Email: string;
             "Registration Number": string;
             "Check In": string;
             "Check Out": string;
             "Duration (mins)": string;
-            "Status": string;
+            Status: string;
           }[] = [];
-          
+
           // Add records for this campus
           filteredRecords
-            .filter((record) => record.student?.campus?.toLowerCase() === campus)
+            .filter(
+              (record) => record.student?.campus?.toLowerCase() === campus
+            )
             .forEach((record) => {
               campusData.push({
-                "Date": new Date(record.date).toLocaleDateString(),
-                "Name": record.student?.name || "Unknown",
-                "Email": record.email,
+                Date: new Date(record.date).toLocaleDateString(),
+                Name: record.student?.name || "Unknown",
+                Email: record.email,
                 "Registration Number": record.student?.regno || "N/A",
                 "Check In": record.checkInTime
                   ? new Date(record.checkInTime).toLocaleTimeString()
@@ -890,33 +896,33 @@ export default function AttendanceAdminDashboard() {
                 "Check Out": record.checkOutTime
                   ? new Date(record.checkOutTime).toLocaleTimeString()
                   : "N/A",
-                "Duration (mins)": (record.duration?.toString() || "0"),
-                "Status": record.status
+                "Duration (mins)": record.duration?.toString() || "0",
+                Status: record.status,
               });
             });
-          
+
           // Add absent students for this campus
           absentStudents
             .filter((student) => student.campus?.toLowerCase() === campus)
             .forEach((student) => {
               campusData.push({
-                "Date": new Date().toLocaleDateString(),
-                "Name": student.name || "Unknown",
-                "Email": student.email,
+                Date: new Date().toLocaleDateString(),
+                Name: student.name || "Unknown",
+                Email: student.email,
                 "Registration Number": student.regno || "N/A",
                 "Check In": "N/A",
                 "Check Out": "N/A",
                 "Duration (mins)": "0",
-                "Status": "absent"
+                Status: "absent",
               });
             });
-          
+
           // Only create worksheet if there's data
           if (campusData.length > 0) {
             const campusWorksheet = XLSX.utils.json_to_sheet(campusData);
             XLSX.utils.book_append_sheet(
-              workbook, 
-              campusWorksheet, 
+              workbook,
+              campusWorksheet,
               campus.toUpperCase()
             );
           }
@@ -924,21 +930,21 @@ export default function AttendanceAdminDashboard() {
       } else {
         // If a specific campus is selected, just create one worksheet
         const campusData: {
-          "Date": string;
-          "Name": string;
-          "Email": string;
+          Date: string;
+          Name: string;
+          Email: string;
           "Registration Number": string;
           "Check In": string;
           "Check Out": string;
           "Duration (mins)": string;
-          "Status": string;
+          Status: string;
         }[] = [];
         // Add records for the selected campus
         filteredRecords.forEach((record) => {
           campusData.push({
-            "Date": new Date(record.date).toLocaleDateString(),
-            "Name": record.student?.name || "Unknown",
-            "Email": record.email,
+            Date: new Date(record.date).toLocaleDateString(),
+            Name: record.student?.name || "Unknown",
+            Email: record.email,
             "Registration Number": record.student?.regno || "N/A",
             "Check In": record.checkInTime
               ? new Date(record.checkInTime).toLocaleTimeString()
@@ -946,159 +952,171 @@ export default function AttendanceAdminDashboard() {
             "Check Out": record.checkOutTime
               ? new Date(record.checkOutTime).toLocaleTimeString()
               : "N/A",
-            "Duration (mins)": (record.duration?.toString() || "0"),
-            "Status": record.status
+            "Duration (mins)": record.duration?.toString() || "0",
+            Status: record.status,
           });
         });
-        
+
         // Add absent students for the selected campus
         absentStudents
-          .filter((student) => 
-            student.campus?.toLowerCase() === campusFilter.toLowerCase()
+          .filter(
+            (student) =>
+              student.campus?.toLowerCase() === campusFilter.toLowerCase()
           )
           .forEach((student) => {
             campusData.push({
-              "Date": new Date().toLocaleDateString(),
-              "Name": student.name || "Unknown",
-              "Email": student.email,"Registration Number": student.regno || "N/A",
+              Date: new Date().toLocaleDateString(),
+              Name: student.name || "Unknown",
+              Email: student.email,
+              "Registration Number": student.regno || "N/A",
               "Check In": "N/A",
               "Check Out": "N/A",
               "Duration (mins)": "0",
-              "Status": "absent"
+              Status: "absent",
             });
           });
-        
+
         // Create worksheet with campus data
         const campusWorksheet = XLSX.utils.json_to_sheet(campusData);
         XLSX.utils.book_append_sheet(
-          workbook, 
-          campusWorksheet, 
+          workbook,
+          campusWorksheet,
           campusFilter.toUpperCase()
         );
       }
-      
+
       // Add a statistics worksheet
       const statsData = [];
-      
+
       // Overall stats
       statsData.push({
-        "Type": "Overall Statistics",
-        "Value": "",
-        "": ""
+        Type: "Overall Statistics",
+        Value: "",
+        "": "",
       });
-      
+
       statsData.push({
-        "Type": "Total Students",
-        "Value": stats.totalStudents,
-        "": ""
+        Type: "Total Students",
+        Value: stats.totalStudents,
+        "": "",
       });
-      
+
       statsData.push({
-        "Type": "Present Today",
-        "Value": stats.presentToday,
-        "": ""
+        Type: "Present Today",
+        Value: stats.presentToday,
+        "": "",
       });
-      
+
       statsData.push({
-        "Type": "Partial Attendance",
-        "Value": stats.partialToday,
-        "": ""
+        Type: "Partial Attendance",
+        Value: stats.partialToday,
+        "": "",
       });
-      
+
       statsData.push({
-        "Type": "Absent Today",
-        "Value": stats.absentToday,
-        "": ""
+        Type: "Absent Today",
+        Value: stats.absentToday,
+        "": "",
       });
-      
+
       statsData.push({
-        "Type": "Average Duration",
-        "Value": `${Math.floor(stats.avgDuration / 60)}h ${stats.avgDuration % 60}m`,
-        "": ""
+        Type: "Average Duration",
+        Value: `${Math.floor(stats.avgDuration / 60)}h ${
+          stats.avgDuration % 60
+        }m`,
+        "": "",
       });
-      
+
       statsData.push({
-        "Type": "Attendance Rate",
-        "Value": `${getAttendancePercentage(campusFilter)}%`,
-        "": ""
+        Type: "Attendance Rate",
+        Value: `${getAttendancePercentage(campusFilter)}%`,
+        "": "",
       });
-      
+
       // Add a space before campus stats
       statsData.push({
-        "Type": "",
-        "Value": "",
-        "": ""
+        Type: "",
+        Value: "",
+        "": "",
       });
-      
+
       // Campus-specific stats
       statsData.push({
-        "Type": "Campus Statistics",
-        "Value": "",
-        "": ""
+        Type: "Campus Statistics",
+        Value: "",
+        "": "",
       });
-      
+
       if (stats.campusStats) {
         campuses.forEach((campus) => {
-          const campusData = stats.campusStats?.[campus as keyof typeof stats.campusStats];
-          
+          const campusData =
+            stats.campusStats?.[campus as keyof typeof stats.campusStats];
+
           if (campusData) {
             statsData.push({
-              "Type": `${campus.toUpperCase()} - Total Students`,
-              "Value": campusData.totalStudents,
-              "": ""
+              Type: `${campus.toUpperCase()} - Total Students`,
+              Value: campusData.totalStudents,
+              "": "",
             });
-            
+
             statsData.push({
-              "Type": `${campus.toUpperCase()} - Present`,
-              "Value": campusData.presentToday,
-              "": ""
+              Type: `${campus.toUpperCase()} - Present`,
+              Value: campusData.presentToday,
+              "": "",
             });
-            
+
             statsData.push({
-              "Type": `${campus.toUpperCase()} - Partial`,
-              "Value": campusData.partialToday,
-              "": ""
+              Type: `${campus.toUpperCase()} - Partial`,
+              Value: campusData.partialToday,
+              "": "",
             });
-            
+
             statsData.push({
-              "Type": `${campus.toUpperCase()} - Absent`,
-              "Value": campusData.absentToday,
-              "": ""
+              Type: `${campus.toUpperCase()} - Absent`,
+              Value: campusData.absentToday,
+              "": "",
             });
-            
+
             statsData.push({
-              "Type": `${campus.toUpperCase()} - Attendance Rate`,
-              "Value": `${campusData.attendanceRate}%`,
-              "": ""
+              Type: `${campus.toUpperCase()} - Attendance Rate`,
+              Value: `${campusData.attendanceRate}%`,
+              "": "",
             });
-            
+
             // Add a space between campuses
             statsData.push({
-              "Type": "",
-              "Value": "",
-              "": ""
+              Type: "",
+              Value: "",
+              "": "",
             });
           }
         });
       }
-      
+
       // Create and add the stats worksheet
       const statsWorksheet = XLSX.utils.json_to_sheet(statsData);
       XLSX.utils.book_append_sheet(workbook, statsWorksheet, "Statistics");
-      
+
       // Generate the Excel file
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-      const excelBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      
+      const excelBuffer = XLSX.write(workbook, {
+        bookType: "xlsx",
+        type: "array",
+      });
+      const excelBlob = new Blob([excelBuffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
       // Download the file
       const url = URL.createObjectURL(excelBlob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `attendance_report_${campusFilter !== "all" ? campusFilter + "_" : ""}${new Date().toISOString().split("T")[0]}.xlsx`;
+      link.download = `attendance_report_${
+        campusFilter !== "all" ? campusFilter + "_" : ""
+      }${new Date().toISOString().split("T")[0]}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       // Dismiss loading toast and show success
       toast.dismiss();
       toast.success("Excel file downloaded successfully");
@@ -2475,7 +2493,7 @@ export default function AttendanceAdminDashboard() {
                           </TableBody>
                         </Table>
                       </div>
-                      
+
                       {/* Export buttons for individual student */}
                       <div className="flex justify-end space-x-2">
                         <Button
@@ -2553,525 +2571,525 @@ export default function AttendanceAdminDashboard() {
                                   ).length;
 
                                   return (
-                                    ((presentCount+ partialCount * 0.5) /
-                                    totalRecords) *
-                                  100
-                                );
+                                    ((presentCount + partialCount * 0.5) /
+                                      totalRecords) *
+                                    100
+                                  );
+                                })()}
+                                className="h-2"
+                              />
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        <Card className="bg-black border-purple-500/30">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-gray-400">
+                              Students with 100% Attendance
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold text-white">
+                              {(() => {
+                                const uniqueStudentIds = [
+                                  ...new Set(
+                                    attendanceRecords.map((r) => r.testUserId)
+                                  ),
+                                ];
+
+                                let perfectAttendanceCount = 0;
+
+                                uniqueStudentIds.forEach((id) => {
+                                  const studentRecords =
+                                    attendanceRecords.filter(
+                                      (r) => r.testUserId === id
+                                    );
+                                  const allPresent = studentRecords.every(
+                                    (r) => r.status === "present"
+                                  );
+
+                                  if (allPresent && studentRecords.length > 0) {
+                                    perfectAttendanceCount++;
+                                  }
+                                });
+
+                                return perfectAttendanceCount;
                               })()}
-                              className="h-2"
-                            />
-                          </div>
-                        </CardContent>
-                      </Card>
+                            </div>
+                          </CardContent>
+                        </Card>
 
-                      <Card className="bg-black border-purple-500/30">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm font-medium text-gray-400">
-                            Students with 100% Attendance
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold text-white">
-                            {(() => {
-                              const uniqueStudentIds = [
-                                ...new Set(
-                                  attendanceRecords.map((r) => r.testUserId)
-                                ),
-                              ];
+                        <Card className="bg-black border-purple-500/30">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-gray-400">
+                              Average Duration
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold text-white">
+                              {(() => {
+                                const recordsWithDuration =
+                                  attendanceRecords.filter((r) => r.duration);
 
-                              let perfectAttendanceCount = 0;
+                                if (recordsWithDuration.length === 0)
+                                  return "0h 0m";
 
-                              uniqueStudentIds.forEach((id) => {
-                                const studentRecords =
-                                  attendanceRecords.filter(
-                                    (r) => r.testUserId === id
+                                const totalDuration =
+                                  recordsWithDuration.reduce(
+                                    (sum, record) =>
+                                      sum + (record.duration || 0),
+                                    0
                                   );
-                                const allPresent = studentRecords.every(
-                                  (r) => r.status === "present"
-                                );
+                                const avgDuration =
+                                  totalDuration / recordsWithDuration.length;
 
-                                if (allPresent && studentRecords.length > 0) {
-                                  perfectAttendanceCount++;
-                                }
-                              });
+                                return `${Math.floor(
+                                  avgDuration / 60
+                                )}h ${Math.round(avgDuration % 60)}m`;
+                              })()}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
 
-                              return perfectAttendanceCount;
-                            })()}
-                          </div>
-                        </CardContent>
-                      </Card>
+                      {/* Students List */}
+                      <div className="mt-6">
+                        <h3 className="text-lg font-semibold mb-4">
+                          All Students
+                        </h3>
+                        <div className="overflow-x-auto rounded-md border border-gray-800">
+                          <Table>
+                            <TableHeader className="bg-gray-900">
+                              <TableRow>
+                                <TableHead className="text-left">
+                                  Student
+                                </TableHead>
+                                <TableHead className="text-left">
+                                  Campus
+                                </TableHead>
+                                <TableHead className="text-left">
+                                  Branch
+                                </TableHead>
+                                <TableHead className="text-left">
+                                  Present
+                                </TableHead>
+                                <TableHead className="text-left">
+                                  Partial
+                                </TableHead>
+                                <TableHead className="text-left">
+                                  Absent
+                                </TableHead>
+                                <TableHead className="text-left">
+                                  Rate
+                                </TableHead>
+                                <TableHead className="text-left">
+                                  Actions
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {students
+                                .filter(
+                                  (student) =>
+                                    campusFilter === "all" ||
+                                    student.campus?.toLowerCase() ===
+                                      campusFilter.toLowerCase()
+                                )
+                                .slice(0, 10)
+                                .map((student) => {
+                                  const studentRecords =
+                                    attendanceRecords.filter(
+                                      (r) => r.testUserId === student._id
+                                    );
+                                  const presentCount = studentRecords.filter(
+                                    (r) => r.status === "present"
+                                  ).length;
+                                  const partialCount = studentRecords.filter(
+                                    (r) => r.status === "half-day"
+                                  ).length;
+                                  const absentCount = studentRecords.filter(
+                                    (r) => r.status === "absent"
+                                  ).length;
 
-                      <Card className="bg-black border-purple-500/30">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm font-medium text-gray-400">
-                            Average Duration
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold text-white">
-                            {(() => {
-                              const recordsWithDuration =
-                                attendanceRecords.filter((r) => r.duration);
+                                  const totalCount =
+                                    presentCount + partialCount + absentCount;
+                                  const attendanceRate =
+                                    totalCount > 0
+                                      ? Math.round(
+                                          ((presentCount + partialCount * 0.5) /
+                                            totalCount) *
+                                            100
+                                        )
+                                      : 0;
 
-                              if (recordsWithDuration.length === 0)
-                                return "0h 0m";
-
-                              const totalDuration =
-                                recordsWithDuration.reduce(
-                                  (sum, record) =>
-                                    sum + (record.duration || 0),
-                                  0
-                                );
-                              const avgDuration =
-                                totalDuration / recordsWithDuration.length;
-
-                              return `${Math.floor(
-                                avgDuration / 60
-                              )}h ${Math.round(avgDuration % 60)}m`;
-                            })()}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    {/* Students List */}
-                    <div className="mt-6">
-                      <h3 className="text-lg font-semibold mb-4">
-                        All Students
-                      </h3>
-                      <div className="overflow-x-auto rounded-md border border-gray-800">
-                        <Table>
-                          <TableHeader className="bg-gray-900">
-                            <TableRow>
-                              <TableHead className="text-left">
-                                Student
-                              </TableHead>
-                              <TableHead className="text-left">
-                                Campus
-                              </TableHead>
-                              <TableHead className="text-left">
-                                Branch
-                              </TableHead>
-                              <TableHead className="text-left">
-                                Present
-                              </TableHead>
-                              <TableHead className="text-left">
-                                Partial
-                              </TableHead>
-                              <TableHead className="text-left">
-                                Absent
-                              </TableHead>
-                              <TableHead className="text-left">
-                                Rate
-                              </TableHead>
-                              <TableHead className="text-left">
-                                Actions
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {students
-                              .filter(
-                                (student) =>
-                                  campusFilter === "all" ||
-                                  student.campus?.toLowerCase() ===
-                                    campusFilter.toLowerCase()
-                              )
-                              .slice(0, 10)
-                              .map((student) => {
-                                const studentRecords =
-                                  attendanceRecords.filter(
-                                    (r) => r.testUserId === student._id
-                                  );
-                                const presentCount = studentRecords.filter(
-                                  (r) => r.status === "present"
-                                ).length;
-                                const partialCount = studentRecords.filter(
-                                  (r) => r.status === "half-day"
-                                ).length;
-                                const absentCount = studentRecords.filter(
-                                  (r) => r.status === "absent"
-                                ).length;
-
-                                const totalCount =
-                                  presentCount + partialCount + absentCount;
-                                const attendanceRate =
-                                  totalCount > 0
-                                    ? Math.round(
-                                        ((presentCount + partialCount * 0.5) /
-                                          totalCount) *
-                                          100
-                                      )
-                                    : 0;
-
-                                return (
-                                  <TableRow
-                                    key={student._id}
-                                    className="hover:bg-gray-900/50"
-                                  >
-                                    <TableCell className="font-medium">
-                                      <div className="flex items-center">
-                                        <Avatar className="h-8 w-8 mr-2">
-                                          <AvatarFallback>
-                                            {student.name.charAt(0)}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <div>
-                                          <div className="font-medium">
-                                            {student.name}
-                                          </div>
-                                          <div className="text-xs text-gray-500">
-                                            {student.regno || student.email}
+                                  return (
+                                    <TableRow
+                                      key={student._id}
+                                      className="hover:bg-gray-900/50"
+                                    >
+                                      <TableCell className="font-medium">
+                                        <div className="flex items-center">
+                                          <Avatar className="h-8 w-8 mr-2">
+                                            <AvatarFallback>
+                                              {student.name.charAt(0)}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                          <div>
+                                            <div className="font-medium">
+                                              {student.name}
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                              {student.regno || student.email}
+                                            </div>
                                           </div>
                                         </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      {student.campus || "N/A"}
-                                    </TableCell>
-                                    <TableCell>
-                                      {student.branch || "N/A"}
-                                    </TableCell>
-                                    <TableCell className="text-green-400">
-                                      {presentCount}
-                                    </TableCell>
-                                    <TableCell className="text-amber-400">
-                                      {partialCount}
-                                    </TableCell>
-                                    <TableCell className="text-red-400">
-                                      {absentCount}
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex items-center gap-2">
-                                        <Progress
-                                          value={attendanceRate}
-                                          className="h-2 w-[60px]"
-                                        />
-                                        <span className="text-sm">
-                                          {attendanceRate}%
-                                        </span>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() =>
-                                          setSelectedStudent(student._id)
-                                        }
-                                      >
-                                        <Eye className="h-4 w-4" />
-                                      </Button>
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                          </TableBody>
-                        </Table>
+                                      </TableCell>
+                                      <TableCell>
+                                        {student.campus || "N/A"}
+                                      </TableCell>
+                                      <TableCell>
+                                        {student.branch || "N/A"}
+                                      </TableCell>
+                                      <TableCell className="text-green-400">
+                                        {presentCount}
+                                      </TableCell>
+                                      <TableCell className="text-amber-400">
+                                        {partialCount}
+                                      </TableCell>
+                                      <TableCell className="text-red-400">
+                                        {absentCount}
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="flex items-center gap-2">
+                                          <Progress
+                                            value={attendanceRate}
+                                            className="h-2 w-[60px]"
+                                          />
+                                          <span className="text-sm">
+                                            {attendanceRate}%
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() =>
+                                            setSelectedStudent(student._id)
+                                          }
+                                        >
+                                          <Eye className="h-4 w-4" />
+                                        </Button>
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                            </TableBody>
+                          </Table>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-          {/* Analytics Tab */}
-          <TabsContent value="analytics" className="space-y-4">
-            <Card className="bg-black border-purple-500/30">
-              <CardHeader>
-                <CardTitle>Attendance Analytics</CardTitle>
-                <CardDescription>
-                  Visualize attendance patterns by campus
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-8">
-                  {/* Period Selector */}
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold">
-                      Attendance Overview
-                    </h3>
-                    <Select
-                      value={currentView}
-                      onValueChange={(value) =>
-                        setCurrentView(value as "day" | "week" | "month")
-                      }
-                    >
-                      <SelectTrigger className="w-[150px] bg-gray-900 border-gray-700 text-white">
-                        <SelectValue placeholder="Period" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-900 border-gray-700 text-white">
-                        <SelectItem value="day">Day</SelectItem>
-                        <SelectItem value="week">Week</SelectItem>
-                        <SelectItem value="month">Month</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+            {/* Analytics Tab */}
+            <TabsContent value="analytics" className="space-y-4">
+              <Card className="bg-black border-purple-500/30">
+                <CardHeader>
+                  <CardTitle>Attendance Analytics</CardTitle>
+                  <CardDescription>
+                    Visualize attendance patterns by campus
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-8">
+                    {/* Period Selector */}
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-semibold">
+                        Attendance Overview
+                      </h3>
+                      <Select
+                        value={currentView}
+                        onValueChange={(value) =>
+                          setCurrentView(value as "day" | "week" | "month")
+                        }
+                      >
+                        <SelectTrigger className="w-[150px] bg-gray-900 border-gray-700 text-white">
+                          <SelectValue placeholder="Period" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-700 text-white">
+                          <SelectItem value="day">Day</SelectItem>
+                          <SelectItem value="week">Week</SelectItem>
+                          <SelectItem value="month">Month</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  {/* Campus comparison */}
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    {/* BBSR Campus Stats */}
-                    <Card className="bg-gray-900/20 border border-purple-500/30">
-                      <CardHeader>
-                        <CardTitle className="text-lg flex items-center">
-                          <School className="h-5 w-5 mr-2 text-purple-500" />
-                          BBSR Campus
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Students:</span>
-                            <span className="font-medium">
-                              {stats.campusStats?.bbsr.totalStudents || 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Present:</span>
-                            <span className="font-medium text-green-400">
-                              {stats.campusStats?.bbsr.presentToday || 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Partial:</span>
-                            <span className="font-medium text-amber-400">
-                              {stats.campusStats?.bbsr.partialToday || 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Absent:</span>
-                            <span className="font-medium text-red-400">
-                              {stats.campusStats?.bbsr.absentToday || 0}
-                            </span>
-                          </div>
-                          <div className="pt-2">
-                            <div className="flex justify-between text-xs mb-1">
-                              <span>Attendance Rate</span>
-                              <span>
-                                {stats.campusStats?.bbsr.attendanceRate || 0}%
+                    {/* Campus comparison */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                      {/* BBSR Campus Stats */}
+                      <Card className="bg-gray-900/20 border border-purple-500/30">
+                        <CardHeader>
+                          <CardTitle className="text-lg flex items-center">
+                            <School className="h-5 w-5 mr-2 text-purple-500" />
+                            BBSR Campus
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Students:</span>
+                              <span className="font-medium">
+                                {stats.campusStats?.bbsr.totalStudents || 0}
                               </span>
                             </div>
-                            <Progress
-                              value={
-                                stats.campusStats?.bbsr.attendanceRate || 0
-                              }
-                              className="h-2"
-                            />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* PKD Campus Stats */}
-                    <Card className="bg-gray-900/20 border border-purple-500/30">
-                      <CardHeader>
-                        <CardTitle className="text-lg flex items-center">
-                          <School className="h-5 w-5 mr-2 text-purple-500" />
-                          PKD Campus
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Students:</span>
-                            <span className="font-medium">
-                              {stats.campusStats?.pkd.totalStudents || 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Present:</span>
-                            <span className="font-medium text-green-400">
-                              {stats.campusStats?.pkd.presentToday || 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Partial:</span>
-                            <span className="font-medium text-amber-400">
-                              {stats.campusStats?.pkd.partialToday || 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Absent:</span>
-                            <span className="font-medium text-red-400">
-                              {stats.campusStats?.pkd.absentToday || 0}
-                            </span>
-                          </div>
-                          <div className="pt-2">
-                            <div className="flex justify-between text-xs mb-1">
-                              <span>Attendance Rate</span>
-                              <span>
-                                {stats.campusStats?.pkd.attendanceRate || 0}%
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Present:</span>
+                              <span className="font-medium text-green-400">
+                                {stats.campusStats?.bbsr.presentToday || 0}
                               </span>
                             </div>
-                            <Progress
-                              value={
-                                stats.campusStats?.pkd.attendanceRate || 0
-                              }
-                              className="h-2"
-                            />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* VZM Campus Stats */}
-                    <Card className="bg-gray-900/20 border border-purple-500/30">
-                      <CardHeader>
-                        <CardTitle className="text-lg flex items-center">
-                          <School className="h-5 w-5 mr-2 text-purple-500" />
-                          VZM Campus
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Students:</span>
-                            <span className="font-medium">
-                              {stats.campusStats?.vzm.totalStudents || 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Present:</span>
-                            <span className="font-medium text-green-400">
-                              {stats.campusStats?.vzm.presentToday || 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Partial:</span>
-                            <span className="font-medium text-amber-400">
-                              {stats.campusStats?.vzm.partialToday || 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Absent:</span>
-                            <span className="font-medium text-red-400">
-                              {stats.campusStats?.vzm.absentToday || 0}
-                            </span>
-                          </div>
-                          <div className="pt-2">
-                            <div className="flex justify-between text-xs mb-1">
-                              <span>Attendance Rate</span>
-                              <span>
-                                {stats.campusStats?.vzm.attendanceRate || 0}%
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Partial:</span>
+                              <span className="font-medium text-amber-400">
+                                {stats.campusStats?.bbsr.partialToday || 0}
                               </span>
                             </div>
-                            <Progress
-                              value={
-                                stats.campusStats?.vzm.attendanceRate || 0
-                              }
-                              className="h-2"
-                            />
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Absent:</span>
+                              <span className="font-medium text-red-400">
+                                {stats.campusStats?.bbsr.absentToday || 0}
+                              </span>
+                            </div>
+                            <div className="pt-2">
+                              <div className="flex justify-between text-xs mb-1">
+                                <span>Attendance Rate</span>
+                                <span>
+                                  {stats.campusStats?.bbsr.attendanceRate || 0}%
+                                </span>
+                              </div>
+                              <Progress
+                                value={
+                                  stats.campusStats?.bbsr.attendanceRate || 0
+                                }
+                                className="h-2"
+                              />
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
+                        </CardContent>
+                      </Card>
 
-                  {/* Campus attendance bar chart placeholder */}
-                  <div className="p-4 border border-gray-800 rounded-lg h-[300px] flex flex-col justify-center items-center bg-gray-900/20">
-                    <BarChart4 className="h-16 w-16 text-purple-500/20 mb-4" />
-                    <p className="text-center text-gray-400">
-                      Campus attendance comparison chart would be displayed
-                      here.
-                      <br />
-                      This visualizes attendance rates across different
-                      campuses.
-                    </p>
-                  </div>
+                      {/* PKD Campus Stats */}
+                      <Card className="bg-gray-900/20 border border-purple-500/30">
+                        <CardHeader>
+                          <CardTitle className="text-lg flex items-center">
+                            <School className="h-5 w-5 mr-2 text-purple-500" />
+                            PKD Campus
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Students:</span>
+                              <span className="font-medium">
+                                {stats.campusStats?.pkd.totalStudents || 0}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Present:</span>
+                              <span className="font-medium text-green-400">
+                                {stats.campusStats?.pkd.presentToday || 0}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Partial:</span>
+                              <span className="font-medium text-amber-400">
+                                {stats.campusStats?.pkd.partialToday || 0}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Absent:</span>
+                              <span className="font-medium text-red-400">
+                                {stats.campusStats?.pkd.absentToday || 0}
+                              </span>
+                            </div>
+                            <div className="pt-2">
+                              <div className="flex justify-between text-xs mb-1">
+                                <span>Attendance Rate</span>
+                                <span>
+                                  {stats.campusStats?.pkd.attendanceRate || 0}%
+                                </span>
+                              </div>
+                              <Progress
+                                value={
+                                  stats.campusStats?.pkd.attendanceRate || 0
+                                }
+                                className="h-2"
+                              />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
 
-                  {/* Weekly Trends */}
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4">
-                      Weekly Trends
-                    </h3>
+                      {/* VZM Campus Stats */}
+                      <Card className="bg-gray-900/20 border border-purple-500/30">
+                        <CardHeader>
+                          <CardTitle className="text-lg flex items-center">
+                            <School className="h-5 w-5 mr-2 text-purple-500" />
+                            VZM Campus
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Students:</span>
+                              <span className="font-medium">
+                                {stats.campusStats?.vzm.totalStudents || 0}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Present:</span>
+                              <span className="font-medium text-green-400">
+                                {stats.campusStats?.vzm.presentToday || 0}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Partial:</span>
+                              <span className="font-medium text-amber-400">
+                                {stats.campusStats?.vzm.partialToday || 0}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-400">Absent:</span>
+                              <span className="font-medium text-red-400">
+                                {stats.campusStats?.vzm.absentToday || 0}
+                              </span>
+                            </div>
+                            <div className="pt-2">
+                              <div className="flex justify-between text-xs mb-1">
+                                <span>Attendance Rate</span>
+                                <span>
+                                  {stats.campusStats?.vzm.attendanceRate || 0}%
+                                </span>
+                              </div>
+                              <Progress
+                                value={
+                                  stats.campusStats?.vzm.attendanceRate || 0
+                                }
+                                className="h-2"
+                              />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Campus attendance bar chart placeholder */}
                     <div className="p-4 border border-gray-800 rounded-lg h-[300px] flex flex-col justify-center items-center bg-gray-900/20">
                       <BarChart4 className="h-16 w-16 text-purple-500/20 mb-4" />
                       <p className="text-center text-gray-400">
-                        Weekly attendance trends would be visualized here.
+                        Campus attendance comparison chart would be displayed
+                        here.
                         <br />
-                        This chart would show attendance patterns throughout
-                        the week for each campus.
+                        This visualizes attendance rates across different
+                        campuses.
                       </p>
                     </div>
-                  </div>
 
-                  {/* Check-in/Check-out Distribution */}
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4">
-                      Check-in Time Distribution
-                    </h3>
-                    <div className="p-4 border border-gray-800 rounded-lg h-[300px] flex flex-col justify-center items-center bg-gray-900/20">
-                      <BarChart4 className="h-16 w-16 text-purple-500/20 mb-4" />
-                      <p className="text-center text-gray-400">
-                        This chart would show the distribution of check-in and
-                        check-out times per campus.
-                        <br />
-                        It helps identify popular times and potential
-                        bottlenecks.
-                      </p>
+                    {/* Weekly Trends */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-4">
+                        Weekly Trends
+                      </h3>
+                      <div className="p-4 border border-gray-800 rounded-lg h-[300px] flex flex-col justify-center items-center bg-gray-900/20">
+                        <BarChart4 className="h-16 w-16 text-purple-500/20 mb-4" />
+                        <p className="text-center text-gray-400">
+                          Weekly attendance trends would be visualized here.
+                          <br />
+                          This chart would show attendance patterns throughout
+                          the week for each campus.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Check-in/Check-out Distribution */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-4">
+                        Check-in Time Distribution
+                      </h3>
+                      <div className="p-4 border border-gray-800 rounded-lg h-[300px] flex flex-col justify-center items-center bg-gray-900/20">
+                        <BarChart4 className="h-16 w-16 text-purple-500/20 mb-4" />
+                        <p className="text-center text-gray-400">
+                          This chart would show the distribution of check-in and
+                          check-out times per campus.
+                          <br />
+                          It helps identify popular times and potential
+                          bottlenecks.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Export Analytics Button */}
+                    <div className="flex justify-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="bg-gray-900 border-gray-700 text-white"
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Export Analytics
+                            <ChevronDown className="h-4 w-4 ml-2" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="bg-gray-900 border-gray-700 text-white">
+                          <DropdownMenuItem onClick={exportToCSV}>
+                            <FileDown className="h-4 w-4 mr-2" />
+                            Export as CSV
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={exportToExcel}>
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Export as Excel
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
-
-                  {/* Export Analytics Button */}
-                  <div className="flex justify-end">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="bg-gray-900 border-gray-700 text-white"
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Export Analytics
-                          <ChevronDown className="h-4 w-4 ml-2" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="bg-gray-900 border-gray-700 text-white">
-                        <DropdownMenuItem onClick={exportToCSV}>
-                          <FileDown className="h-4 w-4 mr-2" />
-                          Export as CSV
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={exportToExcel}>
-                          <FileSpreadsheet className="h-4 w-4 mr-2" />
-                          Export as Excel
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-    </motion.div>
-  </div>
-);
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </motion.div>
+    </div>
+  );
 }
 
 // Define QrCode component (missing in the code)
 const QrCode = ({ className }: { className?: string }) => {
-return (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <rect width="8" height="8" x="3" y="3" rx="1" />
-    <path d="M7 7v.01" />
-    <rect width="8" height="8" x="13" y="3" rx="1" />
-    <path d="M17 7v.01" />
-    <rect width="8" height="8" x="3" y="13" rx="1" />
-    <path d="M7 17v.01" />
-    <path d="M13 13h4" />
-    <path d="M13 17h4" />
-    <path d="M17 17v.01" />
-    <path d="M17 13v.01" />
-  </svg>
-);
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect width="8" height="8" x="3" y="3" rx="1" />
+      <path d="M7 7v.01" />
+      <rect width="8" height="8" x="13" y="3" rx="1" />
+      <path d="M17 7v.01" />
+      <rect width="8" height="8" x="3" y="13" rx="1" />
+      <path d="M7 17v.01" />
+      <path d="M13 13h4" />
+      <path d="M13 17h4" />
+      <path d="M17 17v.01" />
+      <path d="M17 13v.01" />
+    </svg>
+  );
 };
