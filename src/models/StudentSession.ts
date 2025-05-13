@@ -99,11 +99,28 @@ const StudentSessionSchema = new mongoose.Schema({
             enum: ['present', 'half-day', 'absent'],
             default: 'present'
         }
+    }],
+    blockedDevices: [{
+        deviceId: {
+            type: String,
+            required: true
+        },
+        reason: {
+            type: String
+        },
+        blockedAt: {
+            type: Date,
+            default: Date.now
+        }
     }]
 }, { timestamps: true });
+
 
 StudentSessionSchema.index({ email: 1 });
 StudentSessionSchema.index({ deviceId: 1 });
 StudentSessionSchema.index({ 'scanHistory.nonce': 1 });
+StudentSessionSchema.index({ isActive: 1 });
+StudentSessionSchema.index({ deviceId: 1, email: 1 }, { unique: false });
+StudentSessionSchema.index({ 'blockedDevices.deviceId': 1 });
 
 export default mongoose.models.StudentSession || mongoose.model("StudentSession", StudentSessionSchema);

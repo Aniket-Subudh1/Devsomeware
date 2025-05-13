@@ -218,7 +218,71 @@ export default function StudentScanner() {
   };
 
   const generateDeviceFingerprint = async () => {
-    // Create a more comprehensive device fingerprint
+    let existingFingerprint = null;
+
+    try {
+      existingFingerprint = localStorage.getItem("deviceFingerprint");
+      if (existingFingerprint) return existingFingerprint;
+    } catch (e) {
+      console.warn("localStorage access failed:", e);
+    }
+
+    try {
+      existingFingerprint = sessionStorage.getItem("deviceFingerprint");
+      if (existingFingerprint) return existingFingerprint;
+    } catch (e) {
+      console.warn("sessionStorage access failed:", e);
+    }
+
+    if ("indexedDB" in window) {
+      try {
+        const dbPromise = new Promise<string | null>((resolve) => {
+          const request = indexedDB.open("AttendanceSystem", 1);
+
+          request.onupgradeneeded = (event) => {
+            const db = (event.target as IDBOpenDBRequest).result;
+            if (!db.objectStoreNames.contains("deviceData")) {
+              db.createObjectStore("deviceData", { keyPath: "id" });
+            }
+          };
+
+          request.onsuccess = (event) => {
+            const db = (event.target as IDBOpenDBRequest).result;
+            if (!db.objectStoreNames.contains("deviceData")) {
+              resolve(null);
+              return;
+            }
+
+            const transaction = db.transaction(["deviceData"], "readonly");
+            const store = transaction.objectStore("deviceData");
+            const getRequest = store.get("deviceId");
+
+            getRequest.onsuccess = () => {
+              if (getRequest.result) {
+                resolve(getRequest.result.value);
+              } else {
+                resolve(null);
+              }
+            };
+
+            getRequest.onerror = () => {
+              resolve(null);
+            };
+          };
+
+          request.onerror = () => {
+            resolve(null);
+          };
+        });
+
+        existingFingerprint = await dbPromise;
+        if (existingFingerprint) return existingFingerprint;
+      } catch (e) {
+        console.warn("IndexedDB access failed:", e);
+      }
+    }
+
+    // If no existing fingerprint is found, create a comprehensive device fingerprint
     const userAgent = navigator.userAgent;
     const screenWidth = window.screen.width;
     const screenHeight = window.screen.height;
@@ -231,11 +295,22 @@ export default function StudentScanner() {
     const hardwareConcurrency = navigator.hardwareConcurrency || "unknown";
     const platform = navigator.platform || "unknown";
     const vendor = navigator.vendor || "unknown";
+    const pixelRatio = window.devicePixelRatio || 1;
+
+    // List of installed plugins (limited in modern browsers but still useful)
+    const plugins = Array.from(navigator.plugins || [])
+      .map((p) => p.name)
+      .join(",");
+
+    // Browser-specific features and settings
+    const doNotTrack = navigator.doNotTrack || "unknown";
+    const cookieEnabled = navigator.cookieEnabled;
+    const touchPoints = navigator.maxTouchPoints || 0;
 
     // Add canvas fingerprinting for more unique device identification
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
-    let canvasUrl = "canvas-not-supported";
+    let canvasData = "canvas-not-supported";
 
     if (ctx) {
       canvas.width = 200;
@@ -255,41 +330,169 @@ export default function StudentScanner() {
       ctx.arc(50, 50, 50, 0, Math.PI * 2, true);
       ctx.stroke();
 
-      canvasUrl = canvas.toDataURL();
+      // Add unique patterns that vary based on graphics rendering
+      for (let i = 0; i < 20; i++) {
+        ctx.fillStyle = `rgba(${i * 12}, ${i * 8}, ${i * 4}, 0.05)`;
+        ctx.fillRect(i * 10, i * 10, 10, 10);
+      }
+
+      // More complex gradients and shapes
+      const gradient = ctx.createLinearGradient(0, 0, 200, 0);
+      gradient.addColorStop(0, "red");
+      gradient.addColorStop(1, "blue");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 100, 200, 20);
+
+      // Get unique rendering data
+      canvasData = canvas.toDataURL().slice(0, 100); // Use only a part to keep fingerprint manageable
     }
 
-    const fingerprintString = `${userAgent}|${screenWidth}x${screenHeight}|${colorDepth}|${timezone}|${language}|${deviceMemory}|${hardwareConcurrency}|${platform}|${vendor}|${canvasUrl}`;
+    // WebGL fingerprinting - different GPUs and drivers render differently
+    let webglVendor = "unknown";
+    let webglRenderer = "unknown";
+    let webglExtensions = "";
+
+    try {
+      const webglCanvas = document.createElement("canvas");
+      const gl =
+        webglCanvas.getContext("webgl") ||
+        (webglCanvas.getContext(
+          "experimental-webgl"
+        ) as WebGLRenderingContext | null);
+
+      if (gl) {
+        const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+        if (debugInfo) {
+          webglVendor =
+            gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || "unknown";
+          webglRenderer =
+            gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || "unknown";
+        }
+
+        const extensions = gl.getSupportedExtensions() || [];
+        webglExtensions = extensions.join(",").slice(0, 100);
+
+        gl.clearColor(0.2, 0.3, 0.4, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+    } catch (e) {
+      console.warn("WebGL fingerprinting failed", e);
+    }
+
+    let audioFingerprint = "audio-not-supported";
+    try {
+      interface WindowWithWebkitAudio extends Window {
+        webkitAudioContext?: typeof AudioContext;
+      }
+
+      if (
+        window.AudioContext ||
+        (window as WindowWithWebkitAudio).webkitAudioContext
+      ) {
+        const audioContext = new (window.AudioContext ||
+          (window as WindowWithWebkitAudio).webkitAudioContext)();
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        analyser.getByteFrequencyData(dataArray);
+
+        audioFingerprint = Array.from(dataArray.slice(0, 10)).join(",");
+
+        if (audioContext.state !== "closed" && audioContext.close) {
+          audioContext.close();
+        }
+      }
+    } catch (e) {
+      console.warn("Audio fingerprinting failed", e);
+    }
+
+    // Browser features detection
+    const featureDetection = [
+      "ontouchstart" in window,
+      "FileReader" in window,
+      "Notification" in window,
+      "WebSocket" in window,
+      "SharedWorker" in window,
+      "localStorage" in window,
+      "indexedDB" in window,
+      "BroadcastChannel" in window,
+    ]
+      .map((v) => (v ? "1" : "0"))
+      .join("");
+
+    // Combine all collected data into a fingerprint string
+    const fingerprintString = [
+      userAgent,
+      `${screenWidth}x${screenHeight}`,
+      colorDepth,
+      timezone,
+      language,
+      deviceMemory,
+      hardwareConcurrency,
+      platform,
+      vendor,
+      plugins.slice(0, 100),
+      doNotTrack,
+      cookieEnabled ? "1" : "0",
+      pixelRatio,
+      touchPoints,
+      webglVendor,
+      webglRenderer,
+      webglExtensions,
+      canvasData,
+      audioFingerprint,
+      featureDetection,
+    ].join("|");
 
     const encoder = new TextEncoder();
     const data = encoder.encode(fingerprintString);
-    let hashBuffer;
+    let hashHex;
 
     try {
-      hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
     } catch {
       console.warn("WebCrypto not available, using fallback fingerprinting");
       let hash = 0;
       for (let i = 0; i < fingerprintString.length; i++) {
         const char = fingerprintString.charCodeAt(i);
         hash = (hash << 5) - hash + char;
-        hash = hash & hash; // Convert to 32bit integer
+        hash = hash & hash;
       }
-
-      // Convert to hex string
-      return Math.abs(hash).toString(16);
+      hashHex = Math.abs(hash).toString(16);
     }
 
-    // Convert hash to hex string
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    // Store the fingerprint in sessionStorage also for persistence
     try {
+      localStorage.setItem("deviceFingerprint", hashHex);
+
       sessionStorage.setItem("deviceFingerprint", hashHex);
-    } catch {
-      console.warn("SessionStorage not available");
+
+      document.cookie = `deviceFingerprint=${hashHex}; max-age=31536000; path=/; samesite=strict`;
+
+      if ("indexedDB" in window) {
+        const request = indexedDB.open("AttendanceSystem", 1);
+
+        request.onupgradeneeded = (event) => {
+          const db = (event.target as IDBOpenDBRequest).result;
+          if (!db.objectStoreNames.contains("deviceData")) {
+            db.createObjectStore("deviceData", { keyPath: "id" });
+          }
+        };
+
+        request.onsuccess = (event) => {
+          const db = (event.target as IDBOpenDBRequest).result;
+          const transaction = db.transaction(["deviceData"], "readwrite");
+          const store = transaction.objectStore("deviceData");
+
+          store.put({ id: "deviceId", value: hashHex });
+        };
+      }
+    } catch (e) {
+      console.warn("Error storing device fingerprint:", e);
     }
 
     return hashHex;
@@ -315,12 +518,9 @@ export default function StudentScanner() {
       const currentTime = Date.now();
       const qrData = result[0].rawValue;
 
-      // Prevent scanning the same QR code within 2 seconds
       if (lastScannedQR === qrData && currentTime - lastScanTime < 2000) {
         return;
       }
-
-      // Check if we've recently processed a successful scan
       if (scanSuccessTime && currentTime - scanSuccessTime < 2000) {
         return;
       }
@@ -329,7 +529,7 @@ export default function StudentScanner() {
       setScannerActive(false);
       setScanError(null);
 
-      // Store this QR code to prevent immediate re-scanning
+   
       setLastScannedQR(qrData);
       setLastScanTime(currentTime);
 
@@ -338,7 +538,6 @@ export default function StudentScanner() {
       try {
         qrPayload = JSON.parse(qrData);
 
-        // Check QR code timestamp - reject if too old (more than 10 seconds)
         const qrTimestamp = qrPayload.timestamp || 0;
         if (currentTime - qrTimestamp * 1000 > 10000) {
           setScanError("QR code has expired. Please scan a fresh code.");

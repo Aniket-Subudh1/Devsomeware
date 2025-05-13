@@ -67,6 +67,36 @@ export async function POST(req: NextRequest) {
       }, { status: 401, headers });
     }
     
+    // Check if this device is already linked to a different email
+    const deviceSession = await StudentSession.findOne({
+      deviceId: deviceId,
+      email: { $ne: email }
+    });
+    
+    if (deviceSession) {
+      console.warn(`[SECURITY] Device already belongs to another student: ${deviceSession.email}, but trying to use with ${email}`);
+      
+      // Record this suspicious activity
+      await StudentSession.findOneAndUpdate(
+        { deviceId },
+        {
+          $push: {
+            securityLogs: {
+              event: 'cross_account_attempt',
+              details: `Device already registered to ${deviceSession.email} attempted use with ${email}`,
+              timestamp: new Date(),
+              deviceId: deviceId
+            }
+          }
+        }
+      );
+      
+      return NextResponse.json({
+        success: false,
+        message: "This device is registered to another student. Each student must use their own device."
+      }, { status: 403, headers });
+    }
+    
     // Find active session
     const session = await StudentSession.findOne({
       email,
