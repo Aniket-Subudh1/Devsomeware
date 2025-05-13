@@ -341,7 +341,7 @@ export async function GET(req: NextRequest) {
     await ConnectDb();
     
     // Get all students
-    const students = await TestUsers.find({}).lean();
+    const students = await TestUsers.find({}).lean() as unknown as Array<{ _id: string; email: string; campus?: string; [key: string]: unknown }>;
     
     // Get today's date range
     const today = new Date();
@@ -355,10 +355,24 @@ export async function GET(req: NextRequest) {
     // to a specific date range or add pagination
     const attendanceRecords = await Attendance.find({}).sort({ date: -1 }).lean();
     
+    // Define the type for attendance records
+    interface AttendanceRecord {
+      _id: string;
+      testUserId?: string;
+      email: string;
+      date: Date;
+      checkInTime?: Date;
+      checkOutTime?: Date;
+      status: string;
+      lastAction: string;
+      duration?: number;
+      [key: string]: unknown;
+    }
+
     // Map student info to attendance records
-    const recordsWithStudents = attendanceRecords.map((record: any) => {
+    const recordsWithStudents = (attendanceRecords as unknown as AttendanceRecord[]).map((record) => {
       const student = students.find(s => 
-        s._id.toString() === (record.testUserId ? record.testUserId.toString() : '') || 
+        (s._id ? s._id.toString() : '') === (record.testUserId ? record.testUserId.toString() : '') || 
         s.email === record.email
       );
       
@@ -421,7 +435,7 @@ export async function GET(req: NextRequest) {
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
     
-    const weeklyAttendance = [];
+    const weeklyAttendance: number[] = [];
     for (let i = 0; i < 7; i++) {
       weeklyAttendance.push(0); // Initialize with zeros
     }
