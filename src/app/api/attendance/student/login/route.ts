@@ -1,10 +1,10 @@
 import { NextResponse, NextRequest } from "next/server";
 import ConnectDb from "@/middleware/connectDb";
 import TestUsers from "@/models/TestUsers";
+import jwt from "jsonwebtoken";
 import StudentSession from "@/models/StudentSession";
 import Attendance from "@/models/Attendance";
-import jwt from "jsonwebtoken";
-import CryptoJS from "crypto-js";
+
 interface ITestUser {
   _id: string;
   name: string;
@@ -12,7 +12,6 @@ interface ITestUser {
   regno?: string;
   branch?: string;
   campus?: string;
-  password?: string;
 }
 
 interface IAttendance {
@@ -21,70 +20,24 @@ interface IAttendance {
   lastAction?: 'check-in' | 'check-out';
 }
 
+// Define an interface for MongoDB errors to safely check error codes
 interface MongoDBError extends Error {
   code?: number;
   keyPattern?: Record<string, number>;
-  keyValue?: Record<string, any>;
+  keyValue?: Record<string, unknown>;
 }
 
 export async function POST(req: NextRequest) {
   try {
     await ConnectDb();
     const data = await req.json();
-    const { email, deviceId ,password} = data;
+    const { email, deviceId } = data;
 
     if (!email || !deviceId) {
       return NextResponse.json({
         success: false,
         message: "Email and device ID are required"
       }, { status: 400 });
-    }
-    let userexists = await TestUsers.findOne({ email }).lean() as ITestUser | null;
-    //if user is not exists
-    if (!userexists) {
-      return NextResponse.json({
-        success: false,
-        message: "User not found. Please register first. Contact admin if you are facing issues."
-      }, { status: 404 });
-    }
-    //if user is exists
-    //check if password is undefined
-    if (!userexists?.password) {
-        throw new Error("Password is undefined for the user.");
-    }
-    //decrypt the password
-    const decryptpassword = CryptoJS.AES.decrypt(userexists.password, process.env.AES_SECRET || "").toString(CryptoJS.enc.Utf8);
-            //if password is incorrect
-            if (decryptpassword != password) {
-                return NextResponse.json({ message: "Password is incorrect", success: false });
-            }
-    // First check if this device has been used with ANY other email
-    // This allows same email on same device, but prevents different emails on same device
-    const existingDeviceSession = await StudentSession.findOne({ deviceId });
-    
-    if (existingDeviceSession && existingDeviceSession.email !== email) {
-      // Log this as suspicious activity
-      console.warn(`[SECURITY ALERT] Device reuse attempt: Device ${deviceId} already associated with ${existingDeviceSession.email}, but trying to login as ${email}`);
-      
-      // Record this attempt in the session's security logs
-      await StudentSession.findOneAndUpdate(
-        { deviceId },
-        {
-          $push: {
-            securityLogs: {
-              event: 'multiple_email_attempt',
-              details: `Attempt to use device with email ${email} but already registered to ${existingDeviceSession.email}`,
-              timestamp: new Date(),
-              deviceId: deviceId
-            }
-          }
-        }
-      );
-      
-      return NextResponse.json({
-        success: false,
-        message: "This device is already registered to another student. Each student must use their own device."
-      }, { status: 403 });
     }
     
     const student = await TestUsers.findOne({ email }).lean() as ITestUser | null;
@@ -134,17 +87,19 @@ export async function POST(req: NextRequest) {
             lastAction: todayAttendance?.lastAction || null
           });
         } 
-      
+        // Case 2: Different device for same email
         else {
-        
+          // Check if the old session is inactive (last active more than 12 hours ago)
           const lastActiveTime = new Date(existingSession.lastActive).getTime();
           const currentTime = new Date().getTime();
           const hoursSinceLastActive = (currentTime - lastActiveTime) / (1000 * 60 * 60);
           
-     
+          // Log this suspicious activity
           console.warn(`[SECURITY] User ${email} attempting login from new device. Last active: ${hoursSinceLastActive.toFixed(2)} hours ago.`);
           
           if (hoursSinceLastActive > 12) {
+            // Instead of creating a new session later, update the current one
+            // Generate a new token
             const token = jwt.sign(
               { email, id: student._id },
               process.env.JWT_SECRET as string,
@@ -206,8 +161,7 @@ export async function POST(req: NextRequest) {
         }
       }
       
-      // No existing session - create a new one
-      // Generate a new token
+      
       const token = jwt.sign(
         { email, id: student._id },
         process.env.JWT_SECRET as string,
@@ -374,7 +328,7 @@ export async function POST(req: NextRequest) {
             }
           }).sort({ createdAt: -1 }).lean() as IAttendance | null;
           
-          return NextResponse.json({
+        return NextResponse.json({
             success: true,
             message: "Login successful (recreated session)",
             token,

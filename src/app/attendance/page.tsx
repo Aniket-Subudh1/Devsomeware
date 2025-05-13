@@ -11,7 +11,6 @@ import {
   RefreshCw,
   MapPin,
 } from "lucide-react";
-import {  Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,11 +22,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-import { TbLockPassword } from "react-icons/tb";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useRouter } from "next/navigation";
+import { Switch } from "@/components/ui/switch";
+
 interface StudentInfo {
   name?: string;
   email?: string;
@@ -39,18 +37,12 @@ interface StudentInfo {
 }
 
 export default function StudentScanner() {
-
-   const router = useRouter();
-
-
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [scannerActive, setScannerActive] = useState(false);
   const [scannerLoading, setScannerLoading] = useState(false);
   const [sessionToken, setSessionToken] = useState("");
   const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null);
- 
   const [attendanceStatus, setAttendanceStatus] = useState<{
     lastCheckIn: string | null;
     lastCheckOut: string | null;
@@ -253,12 +245,11 @@ export default function StudentScanner() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email||!password) {
+    if (!email) {
       toast.error("Please enter your email");
       return;
     }
-    console.log("Logging in with email:", email);
-    console.log("Logging in with password:", password);
+
     try {
       setLoading(true);
 
@@ -280,7 +271,6 @@ export default function StudentScanner() {
           body: JSON.stringify({
             email,
             deviceId: deviceFingerprint,
-            password,
           }),
         }
       );
@@ -785,18 +775,9 @@ export default function StudentScanner() {
     }
   };
 
-
-  interface QrPayload {
-    type: "check-in" | "check-out";
-    timestamp?: number;
-    expiresAt?: number;
-    geoRequired?: boolean;
-    // Allow additional string-indexed properties with defined types
-    [key: string]: string | number | boolean | undefined;
-  }
-  
+  // Extracted the QR processing logic to a separate function
   const processQrWithLocation = async (
-    qrPayload: QrPayload, 
+    qrPayload: any, 
     qrData: string, 
     locationData: { latitude: number; longitude: number; accuracy?: number; } | null
   ) => {
@@ -804,18 +785,7 @@ export default function StudentScanner() {
       const timestamp = new Date().getTime();
 
       // Prepare the request payload
-      const payload: {
-        token: string;
-        qrData: string;
-        email: string;
-        deviceId: string;
-        type: "check-in" | "check-out";
-        studentLocation?: {
-          latitude: number;
-          longitude: number;
-          accuracy?: number;
-        };
-      } = {
+      const payload: any = {
         token: sessionToken,
         qrData,
         email,
@@ -944,7 +914,7 @@ export default function StudentScanner() {
             }
           );
 
-        if (!response.ok) {
+         if (!response.ok) {
             const errorText = await response.text();
             let errorMessage;
             try {
@@ -1136,20 +1106,6 @@ export default function StudentScanner() {
                     placeholder="Enter your email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="bg-gray-900 border-gray-700 text-white"
-                  />
-                </div>
-                  <div className="space-y-2">
-                  <Label htmlFor="email" className="text-gray-300">
-                    Password
-                  </Label>
-                  <Input
-                    id="email"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
                     required
                     className="bg-gray-900 border-gray-700 text-white"
                   />
@@ -1357,7 +1313,7 @@ export default function StudentScanner() {
                           </p>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center mt-2">
+                        <div className="flex flex-col items-center">
                           <Button
                             onClick={() => setScannerActive(true)}
                             className="mb-2 bg-purple-600 hover:bg-purple-700"
@@ -1412,8 +1368,8 @@ export default function StudentScanner() {
                   }}
                   disabled={scannerActive || scannerLoading || (locationRequired && !currentLocation)}
                 >
-                  <TbLockPassword className="h-4 w-4 mr-2" />
-                  Reset Your Password
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Check In
                 </Button>
                 <Button
                   className="flex-1 bg-blue-600 hover:bg-blue-700"

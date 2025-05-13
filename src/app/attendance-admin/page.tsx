@@ -903,7 +903,7 @@ export default function AdminQRGenerator() {
                       </AlertDescription>
                     </Alert>
 
-                   <div className="flex justify-center space-x-4">
+                    <div className="flex justify-center space-x-4">
                       <Button
                         variant="outline"
                         className={
