@@ -94,6 +94,9 @@ export async function POST(req: NextRequest) {
           const currentTime = new Date().getTime();
           const hoursSinceLastActive = (currentTime - lastActiveTime) / (1000 * 60 * 60);
           
+          // Log this suspicious activity
+          console.warn(`[SECURITY] User ${email} attempting login from new device. Last active: ${hoursSinceLastActive.toFixed(2)} hours ago.`);
+          
           if (hoursSinceLastActive > 12) {
             // Instead of creating a new session later, update the current one
             // Generate a new token
@@ -107,6 +110,19 @@ export async function POST(req: NextRequest) {
             existingSession.deviceId = deviceId;
             existingSession.token = token;
             existingSession.lastActive = new Date();
+            
+            // Add security log
+            if (!existingSession.securityLogs) {
+              existingSession.securityLogs = [];
+            }
+            
+            existingSession.securityLogs.push({
+              event: 'device_change',
+              details: `Device changed after ${hoursSinceLastActive.toFixed(2)} hours of inactivity`,
+              timestamp: new Date(),
+              deviceId: deviceId
+            });
+            
             await existingSession.save();
             
             // Get today's attendance info
@@ -154,8 +170,7 @@ export async function POST(req: NextRequest) {
       );
       
       try {
-        // Create new session with findOneAndUpdate to avoid race conditions and duplicate key errors
-        const newSession = await StudentSession.findOneAndUpdate(
+        await StudentSession.findOneAndUpdate(
           { email },
           {
             $set: {
@@ -164,7 +179,13 @@ export async function POST(req: NextRequest) {
               token,
               deviceId,
               isActive: true,
-              lastActive: new Date()
+              lastActive: new Date(),
+              securityLogs: [{
+                event: 'initial_login',
+                details: 'New session created',
+                timestamp: new Date(),
+                deviceId: deviceId
+              }]
             }
           },
           { upsert: true, new: true }
@@ -211,6 +232,19 @@ export async function POST(req: NextRequest) {
             retrySession.deviceId = deviceId;
             retrySession.token = token;
             retrySession.lastActive = new Date();
+            
+            // Add security log
+            if (!retrySession.securityLogs) {
+              retrySession.securityLogs = [];
+            }
+            
+            retrySession.securityLogs.push({
+              event: 'retry_login',
+              details: 'Retry login after duplicate key error',
+              timestamp: new Date(),
+              deviceId: deviceId
+            });
+            
             await retrySession.save();
             
             // Get today's attendance info
@@ -272,7 +306,13 @@ export async function POST(req: NextRequest) {
             token,
             deviceId,
             isActive: true,
-            lastActive: new Date()
+            lastActive: new Date(),
+            securityLogs: [{
+              event: 'recreate_session',
+              details: 'Session recreated after deletion',
+              timestamp: new Date(),
+              deviceId: deviceId
+            }]
           });
           
           await newSession.save();

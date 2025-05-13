@@ -1,7 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import crypto from "crypto";
 
-
 export async function POST(req: NextRequest) {
   try {
     let data;
@@ -35,16 +34,32 @@ export async function POST(req: NextRequest) {
     
     const adminSignature = process.env.NEXT_PUBLIC_ADMIN_SIGNATURE || 'default-signature';
     
-    const nonce = crypto.randomBytes(8).toString('hex');
+    // Generate cryptographically secure nonce for additional security
+    const nonce = crypto.randomBytes(16).toString('hex');
     
-    const expiresAt = timestamp + 300;
+    // QR codes expire after only 10 seconds for security
+    const expiresAt = timestamp + 10;
+    
+    // Generate unique session ID for this QR code generation
+    const sessionId = crypto.randomBytes(8).toString('hex');
+    
+    // Add a digital signature to prevent tampering 
+    // (would be even better with proper HMAC but this should work for now)
+    const payloadToSign = `${type}:${timestamp}:${nonce}:${adminSignature}:${expiresAt}`;
+    const signature = crypto
+      .createHash('sha256')
+      .update(payloadToSign + (process.env.JWT_SECRET || 'fallback-secret'))
+      .digest('hex');
     
     const qrPayload = {
       type,
       timestamp,
       expiresAt, 
       adminSignature,
-      nonce
+      nonce,
+      sessionId,
+      sig: signature.substring(0, 16), // First 16 chars of signature is enough
+      v: 2 // Version 2 of our QR code protocol
     };
     
     return NextResponse.json({
@@ -116,7 +131,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Handle OPTIONS requests for CORS support
+
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,

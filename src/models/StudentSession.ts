@@ -43,6 +43,40 @@ const StudentSessionSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    scanHistory: [{
+        nonce: {
+            type: String,
+            required: true
+        },
+        timestamp: {
+            type: Date,
+            default: Date.now
+        },
+        action: {
+            type: String,
+            enum: ['check-in', 'check-out'],
+            required: true
+        }
+    }],
+    securityLogs: [{
+        event: {
+            type: String,
+            required: true
+        },
+        details: {
+            type: String
+        },
+        timestamp: {
+            type: Date,
+            default: Date.now
+        },
+        ipAddress: {
+            type: String
+        },
+        deviceId: {
+            type: String
+        }
+    }],
     attendanceHistory: [{
         date: {
             type: Date,
@@ -67,5 +101,9 @@ const StudentSessionSchema = new mongoose.Schema({
         }
     }]
 }, { timestamps: true });
+
+StudentSessionSchema.index({ email: 1 });
+StudentSessionSchema.index({ deviceId: 1 });
+StudentSessionSchema.index({ 'scanHistory.nonce': 1 });
 
 export default mongoose.models.StudentSession || mongoose.model("StudentSession", StudentSessionSchema);

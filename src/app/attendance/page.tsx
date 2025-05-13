@@ -3,7 +3,13 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { Toaster, toast } from "sonner";
-import { Loader2, AlertTriangle, UserCheck, UserX, RefreshCw } from "lucide-react";
+import {
+  Loader2,
+  AlertTriangle,
+  UserCheck,
+  UserX,
+  RefreshCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,15 +53,34 @@ export default function StudentScanner() {
   const [deviceId, setDeviceId] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanSuccessTime, setScanSuccessTime] = useState<number | null>(null);
-  
+  const [lastScannedQR, setLastScannedQR] = useState<string | null>(null);
+  const [lastScanTime, setLastScanTime] = useState<number>(0);
+
   const storeCredentials = (token: string, email: string, deviceId: string) => {
-    document.cookie = `studentAttendanceToken=${token}; max-age=86400; path=/`;
-    document.cookie = `studentAttendanceEmail=${email}; max-age=86400; path=/`;
-    document.cookie = `studentAttendanceDeviceId=${deviceId}; max-age=86400; path=/`;
-    
-    localStorage.setItem("studentAttendanceToken", token);
-    localStorage.setItem("studentAttendanceEmail", email);
-    localStorage.setItem("studentAttendanceDeviceId", deviceId);
+    document.cookie = `studentAttendanceToken=${token}; max-age=86400; path=/; samesite=strict`;
+    document.cookie = `studentAttendanceEmail=${email}; max-age=86400; path=/; samesite=strict`;
+    document.cookie = `studentAttendanceDeviceId=${deviceId}; max-age=86400; path=/; samesite=strict`;
+
+    try {
+      localStorage.setItem("studentAttendanceToken", token);
+      localStorage.setItem("studentAttendanceEmail", email);
+      localStorage.setItem("studentAttendanceDeviceId", deviceId);
+
+      const encryptedBackup = btoa(
+        JSON.stringify({
+          t: token,
+          e: email,
+          d: deviceId,
+          ts: Date.now(),
+        })
+      );
+      localStorage.setItem("attendance_backup", encryptedBackup);
+      sessionStorage.setItem("attendance_backup", encryptedBackup);
+
+      sessionStorage.setItem("deviceFingerprint", deviceId);
+    } catch {
+      console.warn("LocalStorage not available");
+    }
   };
 
   const getCredentials = () => {
@@ -65,11 +90,41 @@ export default function StudentScanner() {
       if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
       return null;
     };
-    
+
+    const cookieToken = getCookie("studentAttendanceToken");
+    const cookieEmail = getCookie("studentAttendanceEmail");
+    const cookieDeviceId = getCookie("studentAttendanceDeviceId");
+
+    const lsToken = localStorage.getItem("studentAttendanceToken");
+    const lsEmail = localStorage.getItem("studentAttendanceEmail");
+    const lsDeviceId = localStorage.getItem("studentAttendanceDeviceId");
+
+    let backupValues = null;
+    try {
+      const backup =
+        localStorage.getItem("attendance_backup") ||
+        sessionStorage.getItem("attendance_backup");
+      if (backup) {
+        const decoded = JSON.parse(atob(backup));
+        backupValues = {
+          token: decoded.t,
+          email: decoded.e,
+          deviceId: decoded.d,
+        };
+      }
+    } catch (e) {
+      console.warn("Error parsing backup:", e);
+    }
+
     return {
-      token: getCookie("studentAttendanceToken") || localStorage.getItem("studentAttendanceToken"),
-      email: getCookie("studentAttendanceEmail") || localStorage.getItem("studentAttendanceEmail"),
-      deviceId: getCookie("studentAttendanceDeviceId") || localStorage.getItem("studentAttendanceDeviceId")
+      token:
+        cookieToken || lsToken || (backupValues ? backupValues.token : null),
+      email:
+        cookieEmail || lsEmail || (backupValues ? backupValues.email : null),
+      deviceId:
+        cookieDeviceId ||
+        lsDeviceId ||
+        (backupValues ? backupValues.deviceId : null),
     };
   };
 
@@ -96,20 +151,23 @@ export default function StudentScanner() {
       setDeviceId(deviceFingerprint);
 
       const timestamp = new Date().getTime();
-      
-      const response = await fetch(`/api/attendance/student/login?_t=${timestamp}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Pragma": "no-cache",
-          "Expires": "0"
-        },
-        body: JSON.stringify({
-          email,
-          deviceId: deviceFingerprint,
-        }),
-      });
+
+      const response = await fetch(
+        `/api/attendance/student/login?_t=${timestamp}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+          body: JSON.stringify({
+            email,
+            deviceId: deviceFingerprint,
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -125,11 +183,11 @@ export default function StudentScanner() {
 
       // Check if response has content before parsing JSON
       const responseText = await response.text();
-      
+
       if (!responseText) {
         throw new Error("Empty response received from server");
       }
-      
+
       const data = JSON.parse(responseText);
 
       if (data.success) {
@@ -149,29 +207,146 @@ export default function StudentScanner() {
       }
     } catch (error) {
       console.error("Error logging in:", error);
-      const errorMessage = error instanceof Error ? error.message : "An error occurred. Please try again.";
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "An error occurred. Please try again.";
       toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
+  const generateDeviceFingerprint = async () => {
+    // Create a more comprehensive device fingerprint
+    const userAgent = navigator.userAgent;
+    const screenWidth = window.screen.width;
+    const screenHeight = window.screen.height;
+    const colorDepth = window.screen.colorDepth;
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const language = navigator.language;
+    const deviceMemory =
+      (navigator as Navigator & { deviceMemory?: number }).deviceMemory ||
+      "unknown";
+    const hardwareConcurrency = navigator.hardwareConcurrency || "unknown";
+    const platform = navigator.platform || "unknown";
+    const vendor = navigator.vendor || "unknown";
+
+    // Add canvas fingerprinting for more unique device identification
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    let canvasUrl = "canvas-not-supported";
+
+    if (ctx) {
+      canvas.width = 200;
+      canvas.height = 200;
+
+      // Text with different styles and colors
+      ctx.textBaseline = "top";
+      ctx.font = "14px Arial";
+      ctx.fillStyle = "#f60";
+      ctx.fillRect(125, 1, 62, 20);
+      ctx.fillStyle = "#069";
+      ctx.fillText("Fingerprint", 2, 15);
+      ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
+      ctx.fillText("DeviceID", 4, 17);
+
+      // Add a special shape
+      ctx.arc(50, 50, 50, 0, Math.PI * 2, true);
+      ctx.stroke();
+
+      canvasUrl = canvas.toDataURL();
+    }
+
+    const fingerprintString = `${userAgent}|${screenWidth}x${screenHeight}|${colorDepth}|${timezone}|${language}|${deviceMemory}|${hardwareConcurrency}|${platform}|${vendor}|${canvasUrl}`;
+
+    const encoder = new TextEncoder();
+    const data = encoder.encode(fingerprintString);
+    let hashBuffer;
+
+    try {
+      hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    } catch {
+      console.warn("WebCrypto not available, using fallback fingerprinting");
+      let hash = 0;
+      for (let i = 0; i < fingerprintString.length; i++) {
+        const char = fingerprintString.charCodeAt(i);
+        hash = (hash << 5) - hash + char;
+        hash = hash & hash; // Convert to 32bit integer
+      }
+
+      // Convert to hex string
+      return Math.abs(hash).toString(16);
+    }
+
+    // Convert hash to hex string
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Store the fingerprint in sessionStorage also for persistence
+    try {
+      sessionStorage.setItem("deviceFingerprint", hashHex);
+    } catch {
+      console.warn("SessionStorage not available");
+    }
+
+    return hashHex;
+  };
+
+  const preventCredentialClearing = () => {
+    const checkInterval = setInterval(() => {
+      const credentials = getCredentials();
+      if (!credentials.token && deviceId) {
+        const storedFingerprint = sessionStorage.getItem("deviceFingerprint");
+        if (storedFingerprint === deviceId) {
+          storeCredentials(sessionToken, email, deviceId);
+          console.log("Credentials restored - tampering detected");
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(checkInterval);
+  };
+
   const handleScan = async (result: { rawValue: string }[]) => {
     try {
-    
-      if (scanSuccessTime && Date.now() - scanSuccessTime < 2000) {
+      const currentTime = Date.now();
+      const qrData = result[0].rawValue;
+
+      // Prevent scanning the same QR code within 2 seconds
+      if (lastScannedQR === qrData && currentTime - lastScanTime < 2000) {
         return;
       }
-      
+
+      // Check if we've recently processed a successful scan
+      if (scanSuccessTime && currentTime - scanSuccessTime < 2000) {
+        return;
+      }
+
       setScannerLoading(true);
       setScannerActive(false);
       setScanError(null);
 
-      const qrData = result[0].rawValue;
+      // Store this QR code to prevent immediate re-scanning
+      setLastScannedQR(qrData);
+      setLastScanTime(currentTime);
+
       let qrPayload;
 
       try {
         qrPayload = JSON.parse(qrData);
+
+        // Check QR code timestamp - reject if too old (more than 10 seconds)
+        const qrTimestamp = qrPayload.timestamp || 0;
+        if (currentTime - qrTimestamp * 1000 > 10000) {
+          setScanError("QR code has expired. Please scan a fresh code.");
+          toast.error("QR code has expired");
+          setScannerLoading(false);
+          setTimeout(() => setScannerActive(true), 1000);
+          return;
+        }
       } catch {
         setScanError("Invalid QR code format. Please try scanning again.");
         toast.error("Invalid QR code format");
@@ -181,30 +356,34 @@ export default function StudentScanner() {
       }
 
       const timestamp = new Date().getTime();
-      
-      const response = await fetch(`/api/attendance/student/record?_t=${timestamp}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Pragma": "no-cache",
-          "Expires": "0"
-        },
-        body: JSON.stringify({
-          token: sessionToken,
-          qrData,
-          email: email,
-          deviceId: deviceId,
-          type: qrPayload.type, 
-        }),
-      });
+
+      const response = await fetch(
+        `/api/attendance/student/record?_t=${timestamp}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+          body: JSON.stringify({
+            token: sessionToken,
+            qrData,
+            email: email,
+            deviceId: deviceId,
+            type: qrPayload.type,
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
         let errorMessage;
         try {
           const errorData = JSON.parse(errorText);
-          errorMessage = errorData.message || `HTTP error! Status: ${response.status}`;
+          errorMessage =
+            errorData.message || `HTTP error! Status: ${response.status}`;
         } catch {
           errorMessage = `HTTP error! Status: ${response.status}`;
         }
@@ -212,11 +391,11 @@ export default function StudentScanner() {
       }
 
       const responseText = await response.text();
-      
+
       if (!responseText) {
         throw new Error("Empty response received from server");
       }
-      
+
       const data = JSON.parse(responseText);
 
       if (data.success) {
@@ -229,52 +408,36 @@ export default function StudentScanner() {
             qrPayload.type === "check-out"
               ? new Date().toISOString()
               : data.lastCheckOut || attendanceStatus.lastCheckOut,
-          lastAction: data.lastAction || qrPayload.type as "check-in" | "check-out",
+          lastAction:
+            data.lastAction || (qrPayload.type as "check-in" | "check-out"),
         });
 
         toast.success(
-          data.message || `${qrPayload.type === "check-in" ? "Check-in" : "Check-out"} recorded successfully`
+          data.message ||
+            `${
+              qrPayload.type === "check-in" ? "Check-in" : "Check-out"
+            } recorded successfully`
         );
-        
+
         setScanSuccessTime(Date.now());
       } else {
         toast.error(data.message || "Failed to record attendance");
-        setScanError(data.message || "Failed to record attendance. Please try again.");
+        setScanError(
+          data.message || "Failed to record attendance. Please try again."
+        );
       }
     } catch (error) {
       console.error("QR scan error:", error);
-      const errorMessage = error instanceof Error ? error.message : "An error occurred. Please try again.";
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "An error occurred. Please try again.";
       toast.error(errorMessage);
       setScanError(errorMessage);
     } finally {
       setScannerLoading(false);
       setTimeout(() => setScannerActive(true), 1500);
     }
-  };
-
-  const generateDeviceFingerprint = async () => {
-    const userAgent = navigator.userAgent;
-    const screenWidth = window.screen.width;
-    const screenHeight = window.screen.height;
-    const colorDepth = window.screen.colorDepth;
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const language = navigator.language;
-    const deviceMemory =
-      (navigator as Navigator & { deviceMemory?: number }).deviceMemory ||
-      "unknown";
-
-    const fingerprintString = `${userAgent}|${screenWidth}x${screenHeight}|${colorDepth}|${timezone}|${language}|${deviceMemory}`;
-
-    const encoder = new TextEncoder();
-    const data = encoder.encode(fingerprintString);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    return hashHex;
   };
 
   useEffect(() => {
@@ -288,30 +451,42 @@ export default function StudentScanner() {
       const verifySession = async () => {
         try {
           setLoading(true);
-          
+
+          // Generate current device fingerprint
+          const currentFingerprint = await generateDeviceFingerprint();
+
+          // Verify if current device matches stored fingerprint
+          if (currentFingerprint !== credentials.deviceId) {
+            throw new Error("Device mismatch detected - security violation");
+          }
+
           const timestamp = new Date().getTime();
 
-          const response = await fetch(`/api/attendance/student/verify?_t=${timestamp}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Cache-Control": "no-cache, no-store, must-revalidate",
-              "Pragma": "no-cache",
-              "Expires": "0"
-            },
-            body: JSON.stringify({
-              token: credentials.token,
-              email: credentials.email,
-              deviceId: credentials.deviceId,
-            }),
-          });
+          const response = await fetch(
+            `/api/attendance/student/verify?_t=${timestamp}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                Pragma: "no-cache",
+                Expires: "0",
+              },
+              body: JSON.stringify({
+                token: credentials.token,
+                email: credentials.email,
+                deviceId: credentials.deviceId,
+              }),
+            }
+          );
 
           if (!response.ok) {
             const errorText = await response.text();
             let errorMessage;
             try {
               const errorData = JSON.parse(errorText);
-              errorMessage = errorData.message || `HTTP error! Status: ${response.status}`;
+              errorMessage =
+                errorData.message || `HTTP error! Status: ${response.status}`;
             } catch {
               errorMessage = `HTTP error! Status: ${response.status}`;
             }
@@ -319,11 +494,11 @@ export default function StudentScanner() {
           }
 
           const responseText = await response.text();
-          
+
           if (!responseText) {
             throw new Error("Empty response received from server");
           }
-          
+
           const data = JSON.parse(responseText);
 
           if (data.success) {
@@ -337,27 +512,44 @@ export default function StudentScanner() {
             localStorage.removeItem("studentAttendanceToken");
             localStorage.removeItem("studentAttendanceEmail");
             localStorage.removeItem("studentAttendanceDeviceId");
-            
-            document.cookie = "studentAttendanceToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-            document.cookie = "studentAttendanceEmail=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-            document.cookie = "studentAttendanceDeviceId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-            
+            localStorage.removeItem("attendance_backup");
+
+            sessionStorage.removeItem("deviceFingerprint");
+            sessionStorage.removeItem("attendance_backup");
+
+            document.cookie =
+              "studentAttendanceToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            document.cookie =
+              "studentAttendanceEmail=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            document.cookie =
+              "studentAttendanceDeviceId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+
             setSessionToken("");
             toast.error("Your session has expired. Please login again.");
           }
         } catch (error) {
           console.error("Error verifying session:", error);
-          const errorMessage = error instanceof Error ? error.message : "Session verification failed";
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Session verification failed";
           toast.error(errorMessage);
-          
+
           localStorage.removeItem("studentAttendanceToken");
           localStorage.removeItem("studentAttendanceEmail");
           localStorage.removeItem("studentAttendanceDeviceId");
-          
-          document.cookie = "studentAttendanceToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-          document.cookie = "studentAttendanceEmail=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-          document.cookie = "studentAttendanceDeviceId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-          
+          localStorage.removeItem("attendance_backup");
+
+          sessionStorage.removeItem("deviceFingerprint");
+          sessionStorage.removeItem("attendance_backup");
+
+          document.cookie =
+            "studentAttendanceToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          document.cookie =
+            "studentAttendanceEmail=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          document.cookie =
+            "studentAttendanceDeviceId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+
           setSessionToken("");
         } finally {
           setLoading(false);
@@ -365,6 +557,8 @@ export default function StudentScanner() {
       };
 
       verifySession();
+      const cleanupChecker = preventCredentialClearing();
+      return cleanupChecker;
     }
   }, []);
 
@@ -384,13 +578,12 @@ export default function StudentScanner() {
       if (
         e.key === "studentAttendanceToken" ||
         e.key === "studentAttendanceEmail" ||
-        e.key === "studentAttendanceDeviceId"
+        e.key === "studentAttendanceDeviceId" ||
+        e.key === "attendance_backup"
       ) {
         if (!e.newValue && sessionToken) {
-          localStorage.setItem("studentAttendanceToken", sessionToken);
-          localStorage.setItem("studentAttendanceEmail", email);
-          localStorage.setItem("studentAttendanceDeviceId", deviceId);
-
+          // Attempt to restore credentials
+          storeCredentials(sessionToken, email, deviceId);
           toast.error("You cannot manually clear your attendance session.");
         }
       }
@@ -487,7 +680,7 @@ export default function StudentScanner() {
                   <div className="text-white font-medium">
                     {studentInfo?.name || email}
                   </div>
-                  
+
                   {studentInfo?.campus && (
                     <>
                       <div className="text-gray-400">Campus:</div>
@@ -496,7 +689,7 @@ export default function StudentScanner() {
                       </div>
                     </>
                   )}
-                  
+
                   <div className="text-gray-400">Last Check-in:</div>
                   <div
                     className={`text-${
@@ -545,12 +738,13 @@ export default function StudentScanner() {
                       onScan={(result) => handleScan(result)}
                       onError={(error) => {
                         console.error("Scanner error:", error);
-                        setScanError("Scanner error. Please refresh and try again.");
+                        setScanError(
+                          "Scanner error. Please refresh and try again."
+                        );
                         toast.error("Scanner error. Please try again.");
                         setScannerActive(false);
                         setTimeout(() => setScannerActive(true), 1000);
                       }}
-                      // Using higher quality and better scanning options
                       constraints={{
                         facingMode: "environment",
                         aspectRatio: 1,
@@ -583,10 +777,10 @@ export default function StudentScanner() {
                       )}
                     </div>
                   )}
-                  
+
                   {/* Refresh scanner button in the corner */}
                   {scannerActive && (
-                    <Button 
+                    <Button
                       size="icon"
                       className="absolute top-2 right-2 bg-black/50 hover:bg-black/80"
                       onClick={handleRefreshScanner}

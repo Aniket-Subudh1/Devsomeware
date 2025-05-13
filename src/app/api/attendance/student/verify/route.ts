@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     let decoded: DecodedToken;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET as string) as DecodedToken;
-    } catch (error) {
+    } catch {
       return NextResponse.json({
         success: false,
         message: "Invalid or expired token"
@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
     
     // Verify email matches token
     if (decoded.email !== email) {
+      console.warn(`[SECURITY] Token email mismatch during verification: token ${decoded.email} vs request ${email}`);
       return NextResponse.json({
         success: false,
         message: "Token email mismatch"
@@ -86,10 +87,26 @@ export async function POST(req: NextRequest) {
       const currentTime = new Date().getTime();
       const hoursSinceLastActive = (currentTime - lastActiveTime) / (1000 * 60 * 60);
       
+      // Log this suspicious activity
+      console.warn(`[SECURITY] Device mismatch during verification for ${email}. Hours since activity: ${hoursSinceLastActive.toFixed(2)}`);
+      
       if (hoursSinceLastActive > 12) {
         // Update the session with the new device ID
         session.deviceId = deviceId;
         session.lastActive = new Date();
+        
+        // Add security log
+        if (!session.securityLogs) {
+          session.securityLogs = [];
+        }
+        
+        session.securityLogs.push({
+          event: 'device_change_verification',
+          details: `Device changed during verification after ${hoursSinceLastActive.toFixed(2)} hours of inactivity`,
+          timestamp: new Date(),
+          deviceId: deviceId
+        });
+        
         await session.save();
       } else {
         return NextResponse.json({

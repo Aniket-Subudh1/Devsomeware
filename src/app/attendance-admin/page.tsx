@@ -123,7 +123,10 @@ export default function AdminQRGenerator() {
     }
   };
 
-  // Generate QR code
+  // In src/app/attendance-admin/page.tsx
+
+  // Make sure the generateQR function is correctly passing the qrType:
+
   const generateQR = async () => {
     // Prevent multiple simultaneous requests
     if (isGenerating) return;
@@ -141,7 +144,7 @@ export default function AdminQRGenerator() {
         },
         body: JSON.stringify({
           adminPassword,
-          type: qrType,
+          type: qrType, // Make sure qrType is correctly passed here
         }),
         cache: "no-store",
       });
@@ -171,6 +174,15 @@ export default function AdminQRGenerator() {
     }
   };
 
+  // Make sure the toggleQrType function is correctly updating state:
+
+  const toggleQrType = () => {
+    const newType = qrType === "check-in" ? "check-out" : "check-in";
+    setQrType(newType);
+    // Force an immediate QR generation with the new type
+    setTimeout(() => generateQR(), 100);
+  };
+
   // Fetch QR statistics
   const fetchQrStats = async () => {
     try {
@@ -196,13 +208,6 @@ export default function AdminQRGenerator() {
     } finally {
       setDataLoading(false);
     }
-  };
-
-  // Toggle QR type (check-in or check-out)
-  const toggleQrType = () => {
-    setQrType((prevType) =>
-      prevType === "check-in" ? "check-out" : "check-in"
-    );
   };
 
   // Go to dashboard
@@ -242,30 +247,38 @@ export default function AdminQRGenerator() {
     }
   }, []);
 
-  // Set up progress bar update
+  useEffect(() => {
+    if (authenticated) {
+      const qrRefreshInterval = setInterval(() => {
+        generateQR();
+      }, 2000);
+
+      return () => {
+        clearInterval(qrRefreshInterval);
+      };
+    }
+  }, [authenticated, qrType]);
+
   useEffect(() => {
     if (!authenticated) return;
 
     const progressInterval = setInterval(() => {
       setProgress((prev) => {
-        // Increment by 5% every 100ms (= 100% in 2 seconds)
-        const newProgress = prev + 5;
+        const newProgress = prev + 10;
         return newProgress > 100 ? 100 : newProgress;
       });
-    }, 100);
+    }, 200);
 
     return () => clearInterval(progressInterval);
   }, [authenticated]);
 
-  // Generate QR code when progress reaches 100%
   useEffect(() => {
     if (progress === 100) {
       generateQR();
-      setProgress(0); // Reset progress
+      setProgress(0);
     }
   }, [progress]);
 
-  // Initial QR generation and stats fetch
   useEffect(() => {
     if (authenticated) {
       generateQR();
@@ -408,15 +421,21 @@ export default function AdminQRGenerator() {
                 <CardContent className="flex flex-col items-center">
                   {/* Countdown display */}
                   <div className="mb-4 w-full">
-  <div className="flex justify-between text-xs text-gray-500 mb-1">
-    <span>QR Refresh Progress</span>
-    <span>
-      <Clock className="h-3 w-3 inline mr-1" />
-      Expires in {Math.ceil((300 - (Date.now() - (qrData ? Date.now() : 0)) / 1000) / 60)} min
-    </span>
-  </div>
-  <Progress value={progress} className="h-1" />
-</div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>QR Refresh Progress</span>
+                      <span>
+                        <Clock className="h-3 w-3 inline mr-1" />
+                        Expires in{" "}
+                        {Math.ceil(
+                          (300 -
+                            (Date.now() - (qrData ? Date.now() : 0)) / 1000) /
+                            60
+                        )}{" "}
+                        min
+                      </span>
+                    </div>
+                    <Progress value={progress} className="h-1" />
+                  </div>
 
                   {/* QR Code */}
                   <div
@@ -431,13 +450,28 @@ export default function AdminQRGenerator() {
                         <Loader2 className="h-12 w-12 animate-spin text-purple-500" />
                       </div>
                     ) : qrData ? (
-                      <QRCodeSVG
-                        value={qrData}
-                        size={256}
-                        level="H"
-                        includeMargin={true}
-                        fgColor={qrType === "check-in" ? "#16a34a" : "#2563eb"}
-                      />
+                      <>
+                        {/* Consider adding a clear type indicator above the QR code */}
+                        <div
+                          className="text-center mb-2 font-bold text-lg"
+                          style={{
+                            color:
+                              qrType === "check-in" ? "#16a34a" : "#2563eb",
+                          }}
+                        >
+                          {qrType === "check-in" ? "CHECK IN" : "CHECK OUT"}
+                        </div>
+
+                        <QRCodeSVG
+                          value={qrData}
+                          size={256}
+                          level="H"
+                          includeMargin={true}
+                          fgColor={
+                            qrType === "check-in" ? "#16a34a" : "#2563eb"
+                          }
+                        />
+                      </>
                     ) : (
                       <div className="w-64 h-64 flex items-center justify-center bg-gray-200">
                         <p className="text-gray-500">QR code not generated</p>
@@ -446,15 +480,17 @@ export default function AdminQRGenerator() {
                   </div>
 
                   <div className="w-full space-y-4">
-                  <Alert className="bg-gray-900/40 border-purple-500/30">
-  <Clock className="h-4 w-4 text-purple-500" />
-  <AlertTitle className="text-white">
-    Extended QR Code Validity
-  </AlertTitle>
-  <AlertDescription className="text-gray-400">
-    This code remains valid for 5 minutes for easier scanning. Students should scan it to record their attendance.
-  </AlertDescription>
-</Alert>
+                    <Alert className="bg-gray-900/40 border-purple-500/30">
+                      <Clock className="h-4 w-4 text-purple-500" />
+                      <AlertTitle className="text-white">
+                        Extended QR Code Validity
+                      </AlertTitle>
+                      <AlertDescription className="text-gray-400">
+                        This code remains valid for 5 minutes for easier
+                        scanning. Students should scan it to record their
+                        attendance.
+                      </AlertDescription>
+                    </Alert>
 
                     <div className="flex justify-center space-x-4">
                       <Button

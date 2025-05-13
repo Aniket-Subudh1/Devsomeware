@@ -3,280 +3,412 @@ import ConnectDb from "@/middleware/connectDb";
 import Attendance from "@/models/Attendance";
 import TestUsers from "@/models/TestUsers";
 import StudentSession from "@/models/StudentSession";
+import jwt from "jsonwebtoken";
 
-export async function GET(req: NextRequest) {
+interface DecodedToken {
+  email: string;
+  id: string;
+}
+
+export async function POST(req: NextRequest) {
   try {
-    const adminPassword = req.nextUrl.searchParams.get('password');
-    const startDate = req.nextUrl.searchParams.get('startDate');
-    const endDate = req.nextUrl.searchParams.get('endDate');
-    const studentId = req.nextUrl.searchParams.get('studentId');
-    const status = req.nextUrl.searchParams.get('status');
-    const campus = req.nextUrl.searchParams.get('campus');
+    await ConnectDb();
     
-    if (!adminPassword || adminPassword !== process.env.ADMIN_PASSWORD) {
+    let data;
+    try {
+      const bodyText = await req.text();
+      if (!bodyText) {
+        return NextResponse.json({
+          success: false,
+          message: "Empty request body"
+        }, { status: 400 });
+      }
+      data = JSON.parse(bodyText);
+    } catch (error) {
+      console.error("Error parsing request body:", error);
       return NextResponse.json({
         success: false,
-        message: "Invalid admin password"
+        message: "Invalid request format"
+      }, { status: 400 });
+    }
+    
+    const { token, qrData, email, deviceId, type } = data || {};
+    
+    if (!token || !qrData || !email || !deviceId || !type) {
+      return NextResponse.json({
+        success: false,
+        message: "Missing required fields"
+      }, { status: 400 });
+    }
+    
+    let qrPayload;
+    try {
+      qrPayload = JSON.parse(qrData);
+    } catch  {
+      return NextResponse.json({
+        success: false,
+        message: "Invalid QR code format"
+      }, { status: 400 });
+    }
+    
+    if (qrPayload.type !== 'check-in' && qrPayload.type !== 'check-out') {
+      return NextResponse.json({
+        success: false,
+        message: "Invalid QR type. Must be 'check-in' or 'check-out'"
+      }, { status: 400 });
+    }
+    
+    const currentTime = Math.floor(Date.now() / 1000);
+    
+    // Check if QR code has a timestamp and validate it was generated very recently
+    const qrTimestamp = qrPayload.timestamp || 0;
+    const expiresAt = qrPayload.expiresAt || (qrTimestamp + 10); // Default to 10 seconds if no expiresAt
+    
+    // Ensure QR code is not expired
+    if (currentTime > expiresAt) {
+      return NextResponse.json({
+        success: false,
+        message: "QR code has expired. Please scan a fresh code."
+      }, { status: 400 });
+    }
+    
+    // Verify signature if needed
+    const adminSignature = process.env.NEXT_PUBLIC_ADMIN_SIGNATURE || 'default-signature';
+    if (qrPayload.adminSignature !== adminSignature) {
+      // Log potential security breach
+      console.warn(`[SECURITY] Invalid QR signature attempt from ${email} with deviceId ${deviceId}`);
+      
+      return NextResponse.json({
+        success: false,
+        message: "Invalid QR code signature"
+      }, { status: 400 });
+    }
+    
+    // Verify token and get student info
+    let decoded: DecodedToken;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET as string) as DecodedToken;
+    } catch  {
+      return NextResponse.json({
+        success: false,
+        message: "Invalid or expired token"
       }, { status: 401 });
+    }
+    
+ 
+    if (decoded.email !== email) {
+     
+      console.warn(`[SECURITY] Token email mismatch: token ${decoded.email} vs request ${email}`);
+      
+      return NextResponse.json({
+        success: false,
+        message: "Token email mismatch"
+      }, { status: 401 });
+    }
+    
+    // Check if student exists
+    const student = await TestUsers.findOne({ email }).lean() as { _id: string; [key: string]: any } | null;
+    if (!student) {
+      return NextResponse.json({
+        success: false,
+        message: "Student not found"
+      }, { status: 404 });
+    }
+    
+    // Verify session and device match
+    const session = await StudentSession.findOne({
+      email,
+      isActive: true,
+    }).lean();
+    
+    if (!session) {
+      return NextResponse.json({
+        success: false,
+        message: "No active session found"
+      }, { status: 401 });
+    }
+
+    if (Array.isArray(session) || !session.deviceId) {
+      return NextResponse.json({
+        success: false,
+        message: "Session data is invalid"
+      }, { status: 500 });
+    }
+    
+ 
+    if (session.deviceId !== deviceId) {
+    
+      console.warn(`[SECURITY] Device mismatch for ${email}: session ${session.deviceId} vs request ${deviceId}`);
+      
+      return NextResponse.json({
+        success: false,
+        message: "This session is bound to a different device. Please use the original device."
+      }, { status: 403 });
+    }
+    
+    // Check if this nonce has been used before (to prevent QR code reuse)
+    if (qrPayload.nonce) {
+      const existingNonceRecord = await StudentSession.findOne({
+        'scanHistory.nonce': qrPayload.nonce
+      });
+      
+      if (existingNonceRecord) {
+        return NextResponse.json({
+          success: false,
+          message: "This QR code has already been used. Please scan a fresh code."
+        }, { status: 400 });
+      }
+    }
+    
+    // Determine the current date (reset to start of day)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Look for existing attendance record for today
+    let attendanceRecord = await Attendance.findOne({
+      email,
+      date: {
+        $gte: today,
+        $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000)
+      }
+    }).sort({ createdAt: -1 });
+    
+    const now = new Date();
+    
+    if (attendanceRecord) {
+      const lastActionTime = attendanceRecord.lastAction === 'check-in' 
+        ? attendanceRecord.checkInTime 
+        : attendanceRecord.checkOutTime;
+        
+      if (lastActionTime) {
+        const timeSinceLastAction = now.getTime() - new Date(lastActionTime).getTime();
+     
+        if (timeSinceLastAction < 10000) {
+          return NextResponse.json({
+            success: false,
+            message: "Please wait before scanning again"
+          }, { status: 429 }); 
+        }
+      }
+    }
+    
+    if (qrPayload.type === 'check-in') {
+  
+      if (!attendanceRecord) {
+      
+        attendanceRecord = new Attendance({
+          email,
+          testUserId: student._id,
+          date: today,
+          checkInTime: now,
+          status: 'present',
+          lastAction: 'check-in'
+        });
+      } else if (attendanceRecord.checkInTime && attendanceRecord.checkOutTime) {
+ 
+        return NextResponse.json({
+          success: true,
+          message: "You have already completed your attendance for today",
+          lastCheckIn: attendanceRecord.checkInTime,
+          lastCheckOut: attendanceRecord.checkOutTime,
+          lastAction: 'complete'
+        });
+      } else if (attendanceRecord.lastAction === 'check-in') {
+      
+        return NextResponse.json({
+          success: true,
+          message: "You are already checked in",
+          lastCheckIn: attendanceRecord.checkInTime,
+          lastCheckOut: attendanceRecord.checkOutTime,
+          lastAction: attendanceRecord.lastAction
+        });
+      } else {
+        // Update existing record with new check-in (after a check-out)attendanceRecord.checkInTime = now;
+        attendanceRecord.lastAction = 'check-in';
+        
+      
+        if (attendanceRecord.status === 'half-day') {
+          attendanceRecord.status = 'present';
+        }
+      }
+    } else if (qrPayload.type === 'check-out') {
+
+  if (!attendanceRecord || !attendanceRecord.checkInTime) {
+    return NextResponse.json({
+      success: false,
+      message: "You need to check in first"
+    }, { status: 400 });
+  }
+  
+
+  if (attendanceRecord.checkInTime && attendanceRecord.checkOutTime && attendanceRecord.lastAction === 'check-out') {
+    return NextResponse.json({
+      success: true,
+      message: "You have already completed your attendance for today",
+      lastCheckIn: attendanceRecord.checkInTime,
+      lastCheckOut: attendanceRecord.checkOutTime,
+      lastAction: 'complete'
+    });
+  }
+  
+ 
+  attendanceRecord.checkOutTime = now;
+  attendanceRecord.lastAction = 'check-out';
+  
+
+  const checkInTime = new Date(attendanceRecord.checkInTime).getTime();
+  const checkOutTime = now.getTime();
+  const durationMinutes = Math.round((checkOutTime - checkInTime) / 60000);
+  attendanceRecord.duration = durationMinutes;
+  
+  
+  if (durationMinutes < 240) { 
+    attendanceRecord.status = 'half-day';
+  } else {
+    attendanceRecord.status = 'present';
+  }
+}
+    
+    try {
+      // Save attendance record
+      await attendanceRecord.save();
+      
+      // Update session with nonce to prevent reuse and add to attendance history
+      await StudentSession.findOneAndUpdate(
+        { email, isActive: true },
+        {
+          lastActive: now,
+          $push: {
+            scanHistory: qrPayload.nonce ? {
+              nonce: qrPayload.nonce,
+              timestamp: now,
+              action: qrPayload.type
+            } : {
+              nonce: "legacy-" + Date.now(),
+              timestamp: now,
+              action: qrPayload.type
+            },
+            attendanceHistory: {
+              date: today,
+              checkInTime: attendanceRecord.checkInTime,
+              checkOutTime: attendanceRecord.checkOutTime,
+              duration: attendanceRecord.duration,
+              status: attendanceRecord.status
+            }
+          },
+          $inc: { totalAttendance: qrPayload.type === 'check-out' ? 1 : 0 }
+        }
+      );
+    } catch (error) {
+      console.error("Error saving attendance record:", error);
+      return NextResponse.json({
+        success: false,
+        message: "Failed to save attendance record"
+      }, { status: 500 });
+    }
+    
+    return NextResponse.json({
+      success: true,
+      message: `${qrPayload.type === 'check-in' ? 'Check-in' : 'Check-out'} recorded successfully`,
+      lastCheckIn: attendanceRecord.checkInTime,
+      lastCheckOut: attendanceRecord.checkOutTime,
+      lastAction: attendanceRecord.lastAction
+    });
+  } catch (error) {
+    console.error("Error recording attendance:", error);
+    return NextResponse.json({
+      success: false,
+      message: "Internal server error"
+    }, { status: 500 });
+  }
+}
+
+// Add a helper verify endpoint
+export async function GET(req: NextRequest) {
+  try {
+    const token = req.nextUrl.searchParams.get('token');
+    const email = req.nextUrl.searchParams.get('email');
+    const deviceId = req.nextUrl.searchParams.get('deviceId');
+    
+    if (!token || !email || !deviceId) {
+      return NextResponse.json({
+        success: false,
+        message: "Missing required parameters"
+      }, { status: 400 });
     }
     
     await ConnectDb();
     
-    const filter: {
-      date?: { $gte?: Date, $lte?: Date },
-      testUserId?: string | { $in: string[] },
-      status?: string,
-      'student.campus'?: string
-    } = {};
-    
-    if (startDate) {
-      const parsedStartDate = new Date(startDate);
-      parsedStartDate.setHours(0, 0, 0, 0);
-      filter.date = { $gte: parsedStartDate };
+    // Verify token
+    let decoded: DecodedToken;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET as string) as DecodedToken;
+    } catch  {
+      return NextResponse.json({
+        success: false,
+        message: "Invalid or expired token"
+      }, { status: 401 });
     }
     
-    if (endDate) {
-      const parsedEndDate = new Date(endDate);
-      parsedEndDate.setHours(23, 59, 59, 999);
-      
-      if (filter.date) {
-        filter.date.$lte = parsedEndDate;
-      } else {
-        filter.date = { $lte: parsedEndDate };
-      }
+    // Verify session
+    const session = await StudentSession.findOne({
+      email,
+      isActive: true,
+      deviceId
+    }).lean();
+    
+    if (!session) {
+      return NextResponse.json({
+        success: false,
+        message: "No active session found for this device"
+      }, { status: 401 });
     }
     
-    if (studentId) {
-      filter.testUserId = studentId;
+    // Get student info
+    const student = await TestUsers.findById(decoded.id).lean();
+    
+    if (!student) {
+      return NextResponse.json({
+        success: false,
+        message: "Student not found"
+      }, { status: 404 });
     }
     
-    if (status && status !== 'all') {
-      filter.status = status;
-    }
-    
-    // Get all students
-    interface Student {
-      _id: string | { toString(): string };
-      name: string;
-      email: string;
-      regno?: string;
-      branch?: string;
-      campus?: string;
-      [key: string]: unknown;
-    }
-    
-    // Get all students
-    const students = (await TestUsers.find({}).lean()).map(user => ({
-      name: user.name || "",
-      email: user.email || "",
-      regno: user.regno,
-      branch: user.branch,
-      campus: user.campus,
-      ...user
-    })) as Student[];
-    
-    const filteredStudentIds = campus && campus !== 'all' 
-      ? students
-          .filter(s => s.campus?.toLowerCase() === campus.toLowerCase())
-          .map(s => s._id.toString())
-      : null;
-    
-    if (filteredStudentIds && filteredStudentIds.length > 0) {
-      filter.testUserId = { $in: filteredStudentIds };
-    }
-    
-    const attendanceRecords = await Attendance.find(filter).sort({ date: -1 }).lean();
-    
-    const populatedRecords = await Promise.all(attendanceRecords.map(async (record) => {
-      const student = students.find(s => s._id.toString() === record.testUserId.toString());
-      return {
-        ...record,
-        student
-      };
-    }));
-    
-    const activeSessions = await StudentSession.find({ isActive: true }).lean();
-    
+    // Get today's attendance
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    const todayRecords = attendanceRecords.filter(r => {
-      const recordDate = new Date(r.date);
-      return recordDate >= today && recordDate < tomorrow;
-    });
-    
-    const uniqueStudentIdsToday = new Set(todayRecords.map(r => r.testUserId.toString()));
-    const presentToday = uniqueStudentIdsToday.size;
-    
-    const partialToday = todayRecords.filter(r => 
-      r.checkInTime && (!r.checkOutTime || r.status === 'half-day')
-    ).length;
-    
-    const checkInsToday = todayRecords.filter(r => r.checkInTime).length;
-    const checkOutsToday = todayRecords.filter(r => r.checkOutTime).length;
-    
-    const campusStats = {
-      bbsr: { totalStudents: 0, presentToday: 0, absentToday: 0, partialToday: 0, attendanceRate: 0 },
-      pkd: { totalStudents: 0, presentToday: 0, absentToday: 0, partialToday: 0, attendanceRate: 0 },
-      vzm: { totalStudents: 0, presentToday: 0, absentToday: 0, partialToday: 0, attendanceRate: 0 }
-    };
-    
-    students.forEach(student => {
-      const campus = student.campus?.toLowerCase() || "";
-      if (campus === "bbsr" || campus === "pkd" || campus === "vzm") {
-        campusStats[campus as keyof typeof campusStats].totalStudents += 1;
+    const attendanceRecord = await Attendance.findOne({
+      email,
+      date: {
+        $gte: today,
+        $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000)
       }
-    });
-    
-    // Process today's attendance by campus
-    const campusAttendanceMap = new Map<string, Set<string>>();
-    const campusPartialMap = new Map<string, Set<string>>();
-    
-    // Initialize sets for each campus
-    ["bbsr", "pkd", "vzm"].forEach(campus => {
-      campusAttendanceMap.set(campus, new Set<string>());
-      campusPartialMap.set(campus, new Set<string>());
-    });
-    
-    // Categorize today's attendance by campus
-    todayRecords.forEach(record => {
-      const student = students.find(s => s._id.toString() === record.testUserId.toString());
-      if (student) {
-        const campus = student.campus?.toLowerCase() || "";
-        if (campus === "bbsr" || campus === "pkd" || campus === "vzm") {
-          // Mark student as present
-          if (record.checkInTime) {
-            campusAttendanceMap.get(campus)?.add(record.testUserId.toString());
-          }
-          
-          // Mark as partial if checked in but not out or status is half-day
-          if (record.checkInTime && (!record.checkOutTime || record.status === 'half-day')) {
-            campusPartialMap.get(campus)?.add(record.testUserId.toString());
-          }
-        }
-      }
-    });
-    
-    // Update campus stats
-    ["bbsr", "pkd", "vzm"].forEach(campus => {
-      const presentStudents = campusAttendanceMap.get(campus)?.size || 0;
-      const partialStudents = campusPartialMap.get(campus)?.size || 0;
-      
-      campusStats[campus as keyof typeof campusStats].presentToday = presentStudents;
-      campusStats[campus as keyof typeof campusStats].partialToday = partialStudents;
-      
-      // Calculate absent students
-      campusStats[campus as keyof typeof campusStats].absentToday = 
-        Math.max(0, campusStats[campus as keyof typeof campusStats].totalStudents - presentStudents);
-      
-      // Calculate attendance rate
-      if (campusStats[campus as keyof typeof campusStats].totalStudents > 0) {
-        campusStats[campus as keyof typeof campusStats].attendanceRate = Math.round(
-          ((presentStudents - partialStudents + (partialStudents * 0.5)) / 
-          campusStats[campus as keyof typeof campusStats].totalStudents) * 100
-        );
-      }
-    });
-    
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay()); 
-    
-    const weeklyData = [];
-    for (let i = 0; i < 7; i++) {
-      const day = new Date(weekStart);
-      day.setDate(weekStart.getDate() + i);
-      
-      const nextDay = new Date(day);
-      nextDay.setDate(day.getDate() + 1);
-      
-      const dayRecords = attendanceRecords.filter(r => {
-        const recordDate = new Date(r.date);
-        return recordDate >= day && recordDate < nextDay;
-      });
-      
-      // Count unique students who checked in
-      const uniqueStudentIds = new Set(dayRecords.map(r => r.testUserId.toString()));
-      const presentCount = uniqueStudentIds.size;
-      
-      weeklyData.push(presentCount);
-    }
-    
-    const monthLabels = [];
-    const presentData = [];
-    const absentData = [];
-    const partialData = [];
-    
-    for (let i = 29; i >= 0; i--) {
-      const day = new Date(today);
-      day.setDate(today.getDate() - i);
-      monthLabels.push(day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-      
-      const nextDay = new Date(day);
-      nextDay.setDate(day.getDate() + 1);
-      
-      const dayRecords = attendanceRecords.filter(r => {
-        const recordDate = new Date(r.date);
-        return recordDate >= day && recordDate < nextDay;
-      });
-      
-      // Count unique students for each day
-      const uniqueStudentIds = new Set(dayRecords.map(r => r.testUserId.toString()));
-      const uniqueFullAttendance = new Set(dayRecords
-        .filter(r => r.checkInTime && r.checkOutTime)
-        .map(r => r.testUserId.toString()));
-      const uniquePartialAttendance = new Set(dayRecords
-        .filter(r => r.checkInTime && !r.checkOutTime)
-        .map(r => r.testUserId.toString()));
-      
-      const presentCount = uniqueFullAttendance.size;
-      const partialCount = uniquePartialAttendance.size;
-      const absentCount = Math.max(0, students.length - (presentCount + partialCount));
-      
-      presentData.push(presentCount);
-      partialData.push(partialCount);
-      absentData.push(absentCount);
-    }
-    
-    // Calculate average duration only for records that have both check-in and check-out
-    const recordsWithDuration = todayRecords.filter(r => r.duration && r.checkInTime && r.checkOutTime);
-    const avgDuration = recordsWithDuration.length > 0 
-      ? recordsWithDuration.reduce((sum, r) => sum + (r.duration || 0), 0) / recordsWithDuration.length 
-      : 0;
-    
-    const stats = {
-      totalStudents: students.length,
-      presentToday,
-      absentToday: Math.max(0, students.length - presentToday),
-      partialToday,
-      checkInsToday,
-      checkOutsToday,
-      avgDuration,
-      weeklyAttendance: weeklyData,
-      monthlyAttendance: {
-        labels: monthLabels,
-        present: presentData,
-        absent: absentData,
-        partial: partialData
-      },
-      campusStats,
-      activeSessions: activeSessions.length
-    };
+    }).sort({ createdAt: -1 }).lean();
     
     return NextResponse.json({
       success: true,
-      records: populatedRecords,
-      students,
-      stats
+      student,
+      lastCheckIn: Array.isArray(attendanceRecord) ? null : attendanceRecord?.checkInTime || null,
+      lastCheckOut: Array.isArray(attendanceRecord) ? null : attendanceRecord?.checkOutTime || null,
+      lastAction: Array.isArray(attendanceRecord) ? null : attendanceRecord?.lastAction || null
     });
-    
   } catch (error) {
-    console.error("Error fetching attendance records:", error);
+    console.error("Error verifying session:", error);
     return NextResponse.json({
       success: false,
-      message: "Error fetching attendance records"
+      message: "Internal server error"
     }, { status: 500 });
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }
