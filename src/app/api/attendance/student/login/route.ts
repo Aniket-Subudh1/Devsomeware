@@ -4,8 +4,9 @@ import TestUsers from "@/models/TestUsers";
 import jwt from "jsonwebtoken";
 import StudentSession from "@/models/StudentSession";
 import Attendance from "@/models/Attendance";
-
+import CryptoJS from "crypto-js";
 interface ITestUser {
+  password(password: any, arg1: string): unknown;
   _id: string;
   name: string;
   email: string;
@@ -46,6 +47,13 @@ export async function POST(req: NextRequest) {
         success: false,
         message: "Student not found. Please register first."
       }, { status: 404 });
+    }
+    const decryptedPassword = CryptoJS.AES.decrypt(student.password as unknown as string, process.env.AES_SECRET || "").toString(CryptoJS.enc.Utf8);
+    if (decryptedPassword !== data.password) {
+      return NextResponse.json({
+        success: false,
+        message: "Password is incorrect"
+      }, { status: 401 });
     }
     
     // Check if there's an existing session with special handling for duplicate key errors

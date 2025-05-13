@@ -25,7 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
-
+import { useRouter } from "next/navigation";
 interface StudentInfo {
   name?: string;
   email?: string;
@@ -35,14 +35,16 @@ interface StudentInfo {
   regno?: string;
   [key: string]: string | number | boolean | undefined;
 }
-
+import { TbLockPassword } from "react-icons/tb";
 export default function StudentScanner() {
   const [email, setEmail] = useState("");
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [scannerActive, setScannerActive] = useState(false);
   const [scannerLoading, setScannerLoading] = useState(false);
   const [sessionToken, setSessionToken] = useState("");
   const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null);
+  const [password, setPassword] = useState("");
   const [attendanceStatus, setAttendanceStatus] = useState<{
     lastCheckIn: string | null;
     lastCheckOut: string | null;
@@ -271,6 +273,7 @@ export default function StudentScanner() {
           body: JSON.stringify({
             email,
             deviceId: deviceFingerprint,
+            password,
           }),
         }
       );
@@ -1110,6 +1113,21 @@ export default function StudentScanner() {
                     className="bg-gray-900 border-gray-700 text-white"
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-gray-300">
+                    Password
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="bg-gray-900 border-gray-700 text-white"
+                  />
+                </div>
                 <Button
                   type="submit"
                   className="w-full bg-purple-600 hover:bg-purple-700"
@@ -1313,7 +1331,7 @@ export default function StudentScanner() {
                           </p>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center">
+                        <div className="flex flex-col items-center mt-2">
                           <Button
                             onClick={() => setScannerActive(true)}
                             className="mb-2 bg-purple-600 hover:bg-purple-700"
@@ -1357,37 +1375,14 @@ export default function StudentScanner() {
                 <Button
                   className="flex-1 bg-green-600 hover:bg-green-700"
                   onClick={() => {
-                    if (locationRequired && !currentLocation) {
-                      toast.error("Please enable location services first");
-                      getLocation();
-                      return;
-                    }
-                    setScannerActive(false);
-                    setScanError(null);
-                    setTimeout(() => setScannerActive(true), 500);
+                    router.push("/training/reset");
                   }}
                   disabled={scannerActive || scannerLoading || (locationRequired && !currentLocation)}
                 >
-                  <UserCheck className="h-4 w-4 mr-2" />
-                  Check In
+                  <TbLockPassword className="h-4 w-4 mr-2" />
+                  Reset Your Password
                 </Button>
-                <Button
-                  className="flex-1 bg-blue-600 hover:bg-blue-700"
-                  onClick={() => {
-                    if (locationRequired && !currentLocation) {
-                      toast.error("Please enable location services first");
-                      getLocation();
-                      return;
-                    }
-                    setScannerActive(false);
-                    setScanError(null);
-                    setTimeout(() => setScannerActive(true), 500);
-                  }}
-                  disabled={scannerActive || scannerLoading || (locationRequired && !currentLocation)}
-                >
-                  <UserX className="h-4 w-4 mr-2" />
-                  Check Out
-                </Button>
+                
               </div>
             </CardContent>
             <CardFooter className="text-center text-xs text-gray-500">
