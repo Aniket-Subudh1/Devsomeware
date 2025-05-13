@@ -12,6 +12,9 @@ import {
   CheckCircle,
   LogOut,
   Clock8,
+  Settings2,
+  MapPin,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +31,38 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useRouter } from "next/navigation";
+
+interface CampusLocation {
+  _id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radius: number;
+  enabled: boolean;
+}
+
+interface AttendanceSettings {
+  geoLocationEnabled: boolean;
+  defaultRadius: number;
+  maxQrValiditySeconds: number;
+}
 
 export default function AdminQRGenerator() {
   const router = useRouter();
@@ -43,6 +77,26 @@ export default function AdminQRGenerator() {
   const [isPulsing, setIsPulsing] = useState(false);
   const [refreshCount, setRefreshCount] = useState(0);
   const [qrType, setQrType] = useState("check-in");
+
+  // Location state
+  const [geoEnabled, setGeoEnabled] = useState(true);
+  const [currentLocation, setCurrentLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  } | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [campusLocations, setCampusLocations] = useState<CampusLocation[]>([]);
+  const [selectedCampus, setSelectedCampus] = useState<string>("");
+
+  // Settings state
+  const [settings, setSettings] = useState<AttendanceSettings>({
+    geoLocationEnabled: true,
+    defaultRadius: 50,
+    maxQrValiditySeconds: 10,
+  });
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Stats state
   interface LatestCheckIn {
@@ -71,6 +125,12 @@ export default function AdminQRGenerator() {
     avgDuration: number;
     weeklyStats: WeeklyStat[];
     latestCheckIns: LatestCheckIn[];
+    campusStats?: {
+      totalStudents: number;
+      presentToday: number;
+      checkInsToday: number;
+      checkOutsToday: number;
+    };
   }
 
   const [qrStats, setQrStats] = useState<QrStats | null>(null);
@@ -79,6 +139,55 @@ export default function AdminQRGenerator() {
   // Time tracking for progress bar
   const [progress, setProgress] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // Get current location
+  const getLocation = () => {
+    setLocationLoading(true);
+    setLocationError(null);
+    
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser");
+      setLocationLoading(false);
+      return;
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        });
+        setLocationLoading(false);
+        toast.success("Location updated successfully");
+      },
+      (error) => {
+        console.error("Error getting location:", error);
+        let errorMessage = "Failed to get location";
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = "Location permission denied";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = "Location information unavailable";
+            break;
+          case error.TIMEOUT:
+            errorMessage = "Location request timed out";
+            break;
+        }
+        
+        setLocationError(errorMessage);
+        setLocationLoading(false);
+        toast.error(errorMessage);
+      },
+      { 
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0 
+      }
+    );
+  };
 
   // Authenticate admin
   interface AuthResponse {
@@ -112,6 +221,13 @@ export default function AdminQRGenerator() {
         sessionStorage.setItem("adminAuthenticated", "true");
         sessionStorage.setItem("adminPassword", adminPassword);
         toast.success("Authentication successful");
+        
+        // Get initial location after authentication
+        getLocation();
+        
+        // Fetch settings and campus locations
+        fetchSettings();
+        fetchCampusLocations();
       } else {
         toast.error(data.message || "Authentication failed");
       }
@@ -123,10 +239,6 @@ export default function AdminQRGenerator() {
     }
   };
 
-  // In src/app/attendance-admin/page.tsx
-
-  // Make sure the generateQR function is correctly passing the qrType:
-
   const generateQR = async () => {
     // Prevent multiple simultaneous requests
     if (isGenerating) return;
@@ -137,15 +249,36 @@ export default function AdminQRGenerator() {
       // Reset progress bar
       setProgress(0);
 
+      // Create payload with or without location based on settings
+      const payload: {
+        adminPassword: string;
+        type: string;
+        adminLocation?: {
+          latitude: number;
+          longitude: number;
+          accuracy?: number;
+        };
+        campus?: string;
+      } = {
+        adminPassword,
+        type: qrType,
+      };
+
+      // Add location data if enabled and available
+      if (geoEnabled && settings.geoLocationEnabled) {
+        if (selectedCampus) {
+          payload.campus = selectedCampus;
+        } else if (currentLocation) {
+          payload.adminLocation = currentLocation;
+        }
+      }
+
       const response = await fetch("/api/attendance/admin/qr", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          adminPassword,
-          type: qrType, // Make sure qrType is correctly passed here
-        }),
+        body: JSON.stringify(payload),
         cache: "no-store",
       });
 
@@ -155,6 +288,11 @@ export default function AdminQRGenerator() {
         setQrData(data.qrData);
         setIsPulsing(true);
         setRefreshCount((prev) => prev + 1);
+
+        // Update geo status from response
+        if (data.geoLocationEnabled !== undefined) {
+          setGeoEnabled(data.geoLocationEnabled);
+        }
 
         // Fetch stats occasionally
         if (refreshCount % 3 === 0) {
@@ -174,13 +312,94 @@ export default function AdminQRGenerator() {
     }
   };
 
-  // Make sure the toggleQrType function is correctly updating state:
-
   const toggleQrType = () => {
     const newType = qrType === "check-in" ? "check-out" : "check-in";
     setQrType(newType);
     // Force an immediate QR generation with the new type
     setTimeout(() => generateQR(), 100);
+  };
+
+  // Fetch attendance settings
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch(`/api/attendance/admin/settings?password=${adminPassword}`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSettings(data.settings);
+        setGeoEnabled(data.settings.geoLocationEnabled);
+      } else {
+        toast.error(data.message || "Failed to fetch settings");
+      }
+    } catch (error) {
+      console.error("Error fetching settings:", error);
+      toast.error("Failed to load settings");
+    }
+  };
+
+  // Save attendance settings
+  const saveSettings = async () => {
+    try {
+      setLoading(true);
+      
+      const response = await fetch("/api/attendance/admin/settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          adminPassword,
+          settings,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Settings updated successfully");
+        setSettingsOpen(false);
+        setGeoEnabled(settings.geoLocationEnabled);
+      } else {
+        toast.error(data.message || "Failed to update settings");
+      }
+    } catch (error) {
+      console.error("Error updating settings:", error);
+      toast.error("Failed to update settings");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch campus locations
+  const fetchCampusLocations = async () => {
+    try {
+      const response = await fetch("/api/attendance/admin/locations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          adminPassword,
+          action: "get",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCampusLocations(data.locations);
+      } else {
+        toast.error(data.message || "Failed to fetch campus locations");
+      }
+    } catch (error) {
+      console.error("Error fetching campus locations:", error);
+      toast.error("Failed to load campus locations");
+    }
   };
 
   // Fetch QR statistics
@@ -257,7 +476,7 @@ export default function AdminQRGenerator() {
         clearInterval(qrRefreshInterval);
       };
     }
-  }, [authenticated, qrType]);
+  }, [authenticated, qrType, geoEnabled, currentLocation, selectedCampus]);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -283,6 +502,8 @@ export default function AdminQRGenerator() {
     if (authenticated) {
       generateQR();
       fetchQrStats();
+      fetchSettings();
+      fetchCampusLocations();
     }
   }, [authenticated]);
 
@@ -351,6 +572,96 @@ export default function AdminQRGenerator() {
     <div className="min-h-screen bg-black p-4 md:p-8">
       <Toaster richColors position="top-center" />
 
+      {/* Settings Modal */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="bg-black border-purple-500/30 text-gray-100">
+          <DialogHeader>
+            <DialogTitle className="text-xl text-white">Attendance Settings</DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Configure geolocation and attendance settings
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="geo-enabled" className="text-white">Geolocation Attendance</Label>
+                <p className="text-xs text-gray-400">Require student location for attendance</p>
+              </div>
+              <Switch
+                id="geo-enabled"
+                checked={settings.geoLocationEnabled}
+                onCheckedChange={(checked) => 
+                  setSettings({...settings, geoLocationEnabled: checked})
+                }
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="default-radius" className="text-white">Default Radius (meters)</Label>
+              <Input
+                id="default-radius"
+                type="number"
+                value={settings.defaultRadius}
+                onChange={(e) => 
+                  setSettings({...settings, defaultRadius: parseInt(e.target.value) || 50})
+                }
+                min={10}
+                max={500}
+                className="bg-gray-900 border-gray-700 text-white"
+              />
+              <p className="text-xs text-gray-400">
+                Students must be within this distance to record attendance
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="qr-validity" className="text-white">QR Code Validity (seconds)</Label>
+              <Input
+                id="qr-validity"
+                type="number"
+                value={settings.maxQrValiditySeconds}
+                onChange={(e) => 
+                  setSettings({...settings, maxQrValiditySeconds: parseInt(e.target.value) || 10})
+                }
+                min={5}
+                max={300}
+                className="bg-gray-900 border-gray-700 text-white"
+              />
+              <p className="text-xs text-gray-400">
+                How long each QR code remains valid after generation
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSettingsOpen(false)}
+              className="border-gray-700 text-gray-300 hover:bg-gray-800"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={saveSettings}
+              className="bg-purple-600 hover:bg-purple-700"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Settings"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -377,6 +688,13 @@ export default function AdminQRGenerator() {
               <Button
                 variant="outline"
                 className="border-gray-700 text-gray-400 hover:bg-gray-800"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <Settings2 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                className="border-gray-700 text-gray-400 hover:bg-gray-800"
                 onClick={fetchQrStats}
                 disabled={dataLoading}
               >
@@ -397,8 +715,7 @@ export default function AdminQRGenerator() {
                   <div className="flex justify-between items-center">
                     <div>
                       <CardTitle className="text-2xl bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent">
-                        {qrType === "check-in" ? "Check-In" : "Check-Out"} QR
-                        Code
+                        {qrType === "check-in" ? "Check-In" : "Check-Out"} QR Code
                       </CardTitle>
                       <CardDescription className="text-gray-400">
                         Students scan this code to mark attendance
@@ -419,6 +736,88 @@ export default function AdminQRGenerator() {
                   </div>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center">
+                  {/* Location Controls */}
+                  <div className="w-full mb-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center space-x-2">
+                        <MapPin className={`h-4 w-4 ${geoEnabled && settings.geoLocationEnabled ? 'text-green-500' : 'text-gray-500'}`} />
+                        <span className="text-sm text-gray-300">
+                          Geolocation {geoEnabled && settings.geoLocationEnabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </div>
+                      <Switch 
+                        checked={geoEnabled}
+                        onCheckedChange={(checked) => setGeoEnabled(checked)}
+                        disabled={!settings.geoLocationEnabled}
+                      />
+                    </div>
+                    
+                    {geoEnabled && settings.geoLocationEnabled && (
+                      <>
+                        {/* Campus Selection */}
+                        <div className="space-y-1">
+                          <Label htmlFor="campus-select" className="text-sm text-gray-300">
+                            Select Campus
+                          </Label>
+                          <Select value={selectedCampus} onValueChange={setSelectedCampus}>
+                            <SelectTrigger className="bg-gray-900 border-gray-700 text-white">
+                              <SelectValue placeholder="Select campus or use current location" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-gray-900 border-gray-700 text-white">
+                              <SelectItem value="">Use Current Location</SelectItem>
+                              {campusLocations.map((campus) => (
+                                <SelectItem key={campus._id} value={campus.name}>
+                                  {campus.name.toUpperCase()} Campus
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        {!selectedCampus && (
+                          <div className="flex justify-between items-center">
+                            <div>
+                              {currentLocation ? (
+                                <div className="text-xs text-gray-400">
+                                  Lat: {currentLocation.latitude.toFixed(6)}, Lng: {currentLocation.longitude.toFixed(6)}
+                                  {currentLocation.accuracy && ` (±${Math.round(currentLocation.accuracy)}m)`}
+                                </div>
+                              ) : locationError ? (
+                                <div className="text-xs text-red-400">{locationError}</div>
+                              ) : (
+                                <div className="text-xs text-gray-400">No location data</div>
+                              )}
+                            </div>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                              onClick={getLocation}
+                              disabled={locationLoading}
+                            >
+                              {locationLoading ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <MapPin className="h-3 w-3" />
+                              )}
+                              <span className="ml-1">Update</span>
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  
+                  {geoEnabled && settings.geoLocationEnabled && !currentLocation && !selectedCampus && (
+                    <Alert className="mb-4 bg-red-950/20 border-red-500/30">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      <AlertTitle className="text-white">No Location Available</AlertTitle>
+                      <AlertDescription className="text-gray-400">
+                        QR codes require location data. Please update your location or select a campus.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   {/* Countdown display */}
                   <div className="mb-4 w-full">
                     <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -427,11 +826,11 @@ export default function AdminQRGenerator() {
                         <Clock className="h-3 w-3 inline mr-1" />
                         Expires in{" "}
                         {Math.ceil(
-                          (300 -
-                            (Date.now() - (qrData ? Date.now() : 0)) / 1000) /
-                            60
+                          (settings.maxQrValiditySeconds || 10) - 
+                          (Date.now() / 1000 - 
+                           (qrData ? JSON.parse(qrData).timestamp : Date.now() / 1000))
                         )}{" "}
-                        min
+                        sec
                       </span>
                     </div>
                     <Progress value={progress} className="h-1" />
@@ -451,7 +850,7 @@ export default function AdminQRGenerator() {
                       </div>
                     ) : qrData ? (
                       <>
-                        {/* Consider adding a clear type indicator above the QR code */}
+                        {/* Clear type indicator above the QR code */}
                         <div
                           className="text-center mb-2 font-bold text-lg"
                           style={{
@@ -471,6 +870,16 @@ export default function AdminQRGenerator() {
                             qrType === "check-in" ? "#16a34a" : "#2563eb"
                           }
                         />
+                        
+                        {/* If geolocation is enabled, show badge */}
+                        {geoEnabled && settings.geoLocationEnabled && (
+                          <div className="mt-2 text-center">
+                            <Badge variant="outline" className="bg-purple-900/20 text-purple-400 border-purple-500/30">
+                              <MapPin className="h-3 w-3 mr-1" />
+                              {selectedCampus ? `${selectedCampus.toUpperCase()} Campus` : "Current Location"}
+                            </Badge>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <div className="w-64 h-64 flex items-center justify-center bg-gray-200">
@@ -483,16 +892,18 @@ export default function AdminQRGenerator() {
                     <Alert className="bg-gray-900/40 border-purple-500/30">
                       <Clock className="h-4 w-4 text-purple-500" />
                       <AlertTitle className="text-white">
-                        Extended QR Code Validity
+                        QR Code Validity
                       </AlertTitle>
                       <AlertDescription className="text-gray-400">
-                        This code remains valid for 5 minutes for easier
-                        scanning. Students should scan it to record their
-                        attendance.
+                        This code remains valid for {settings.maxQrValiditySeconds} seconds.
+                        {geoEnabled && settings.geoLocationEnabled && " Students must be within "+
+                        (selectedCampus ? 
+                          campusLocations.find(c => c.name === selectedCampus)?.radius || settings.defaultRadius : 
+                          settings.defaultRadius)+" meters to record attendance."}
                       </AlertDescription>
                     </Alert>
 
-                    <div className="flex justify-center space-x-4">
+                   <div className="flex justify-center space-x-4">
                       <Button
                         variant="outline"
                         className={
@@ -601,6 +1012,28 @@ export default function AdminQRGenerator() {
                         </div>
                       </div>
 
+                      {/* Show campus stats if a campus is selected */}
+                      {selectedCampus && qrStats.campusStats && (
+                        <div className="bg-gray-900/50 p-3 rounded-lg border border-purple-500/30">
+                          <div className="text-sm font-semibold text-white mb-2">
+                            {selectedCampus.toUpperCase()} Campus Stats
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div className="text-gray-400">Total Students:</div>
+                            <div className="text-white">{qrStats.campusStats.totalStudents}</div>
+                            
+                            <div className="text-gray-400">Present Today:</div>
+                            <div className="text-white">{qrStats.campusStats.presentToday}</div>
+                            
+                            <div className="text-gray-400">Check-ins:</div>
+                            <div className="text-white">{qrStats.campusStats.checkInsToday}</div>
+                            
+                            <div className="text-gray-400">Check-outs:</div>
+                            <div className="text-white">{qrStats.campusStats.checkOutsToday}</div>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex justify-between text-sm text-gray-400">
                         <div>
                           Active Sessions:{" "}
@@ -623,6 +1056,60 @@ export default function AdminQRGenerator() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Campus Management Card */}
+              {settings.geoLocationEnabled && (
+                <Card className="bg-black border-purple-500/30">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg text-gray-200">
+                      Campus Locations
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {campusLocations.length > 0 ? (
+                        campusLocations.map((campus) => (
+                          <div key={campus._id} className="p-3 bg-gray-900/50 rounded-lg border border-gray-800">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="font-medium text-white">{campus.name.toUpperCase()} Campus</span>
+                              <Badge 
+                                variant="outline" 
+                                className={campus.enabled ? 
+                                  "bg-green-900/20 text-green-400 border-green-500/30" :
+                                  "bg-red-900/20 text-red-400 border-red-500/30"}
+                              >
+                                {campus.enabled ? "Enabled" : "Disabled"}
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-2 text-xs">
+                              <div className="text-gray-400">Latitude:</div>
+                              <div className="text-gray-300">{campus.latitude.toFixed(6)}</div>
+                              
+                              <div className="text-gray-400">Longitude:</div>
+                              <div className="text-gray-300">{campus.longitude.toFixed(6)}</div>
+                              
+                              <div className="text-gray-400">Radius:</div>
+                              <div className="text-gray-300">{campus.radius}m</div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-4 text-gray-500">
+                          No campus locations configured
+                        </div>
+                      )}
+                      
+                      <Alert className="bg-gray-900/40 border-amber-500/30">
+                        <MapPin className="h-4 w-4 text-amber-500" />
+                        <AlertTitle className="text-white">Campus Configuration</AlertTitle>
+                        <AlertDescription className="text-gray-400">
+                          Configure campus locations in the settings. Students must be physically present at their assigned campus to mark attendance.
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Recent Activity */}
               {qrStats?.latestCheckIns && qrStats.latestCheckIns.length > 0 && (
