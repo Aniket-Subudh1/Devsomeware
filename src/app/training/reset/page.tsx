@@ -82,7 +82,7 @@ function SignupFormDemo() {
       setTimeout(() => {
         toast.success("Redirecting to login page...");
         setTimeout(()=>{
-        router.push("/login")
+        router.push("/attendance");
         },1000)
       },1000)
     } else {
