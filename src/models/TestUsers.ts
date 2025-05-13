@@ -27,6 +27,10 @@ const TestUserSchema = new mongoose.Schema({
     campus:{
         type: String,
         required: false
+    },
+    password:{
+        type: String,
+        required: true
     }
 
    

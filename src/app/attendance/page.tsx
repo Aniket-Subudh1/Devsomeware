@@ -36,6 +36,7 @@ interface StudentInfo {
 
 export default function StudentScanner() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [scannerActive, setScannerActive] = useState(false);
   const [scannerLoading, setScannerLoading] = useState(false);
@@ -139,11 +140,12 @@ export default function StudentScanner() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email) {
+    if (!email||!password) {
       toast.error("Please enter your email");
       return;
     }
-
+    console.log("Logging in with email:", email);
+    console.log("Logging in with password:", password);
     try {
       setLoading(true);
 
@@ -165,6 +167,7 @@ export default function StudentScanner() {
           body: JSON.stringify({
             email,
             deviceId: deviceFingerprint,
+            password,
           }),
         }
       );
@@ -831,6 +834,20 @@ export default function StudentScanner() {
                     className="bg-gray-900 border-gray-700 text-white"
                   />
                 </div>
+                  <div className="space-y-2">
+                  <Label htmlFor="email" className="text-gray-300">
+                    Password
+                  </Label>
+                  <Input
+                    id="email"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="bg-gray-900 border-gray-700 text-white"
+                  />
+                </div>
                 <Button
                   type="submit"
                   className="w-full bg-purple-600 hover:bg-purple-700"
@@ -960,7 +977,7 @@ export default function StudentScanner() {
                           </p>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center">
+                        <div className="flex flex-col items-center mt-2">
                           <Button
                             onClick={() => setScannerActive(true)}
                             className="mb-2 bg-purple-600 hover:bg-purple-700"
@@ -1000,7 +1017,7 @@ export default function StudentScanner() {
                 </AlertDescription>
               </Alert>
 
-              <div className="flex w-full space-x-2">
+              {/* <div className="flex w-full space-x-2">
                 <Button
                   className="flex-1 bg-green-600 hover:bg-green-700"
                   onClick={() => {
@@ -1025,7 +1042,7 @@ export default function StudentScanner() {
                   <UserX className="h-4 w-4 mr-2" />
                   Check Out
                 </Button>
-              </div>
+              </div> */}
             </CardContent>
             <CardFooter className="text-center text-xs text-gray-500">
               <p>

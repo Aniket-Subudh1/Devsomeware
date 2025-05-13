@@ -1,10 +1,10 @@
 import { NextResponse, NextRequest } from "next/server";
 import ConnectDb from "@/middleware/connectDb";
 import TestUsers from "@/models/TestUsers";
-import jwt from "jsonwebtoken";
 import StudentSession from "@/models/StudentSession";
 import Attendance from "@/models/Attendance";
-
+import jwt from "jsonwebtoken";
+import CryptoJS from "crypto-js";
 interface ITestUser {
   _id: string;
   name: string;
@@ -12,6 +12,7 @@ interface ITestUser {
   regno?: string;
   branch?: string;
   campus?: string;
+  password?: string;
 }
 
 interface IAttendance {
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   try {
     await ConnectDb();
     const data = await req.json();
-    const { email, deviceId } = data;
+    const { email, deviceId ,password} = data;
 
     if (!email || !deviceId) {
       return NextResponse.json({
@@ -38,7 +39,25 @@ export async function POST(req: NextRequest) {
         message: "Email and device ID are required"
       }, { status: 400 });
     }
-    
+    let userexists = await TestUsers.findOne({ email }).lean() as ITestUser | null;
+    //if user is not exists
+    if (!userexists) {
+      return NextResponse.json({
+        success: false,
+        message: "User not found. Please register first. Contact admin if you are facing issues."
+      }, { status: 404 });
+    }
+    //if user is exists
+    //check if password is undefined
+    if (!userexists?.password) {
+        throw new Error("Password is undefined for the user.");
+    }
+    //decrypt the password
+    const decryptpassword = CryptoJS.AES.decrypt(userexists.password, process.env.AES_SECRET || "").toString(CryptoJS.enc.Utf8);
+            //if password is incorrect
+            if (decryptpassword != password) {
+                return NextResponse.json({ message: "Password is incorrect", success: false });
+            }
     // First check if this device has been used with ANY other email
     // This allows same email on same device, but prevents different emails on same device
     const existingDeviceSession = await StudentSession.findOne({ deviceId });
