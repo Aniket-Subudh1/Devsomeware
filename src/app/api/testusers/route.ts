@@ -15,15 +15,16 @@ export const POST = async (req: NextRequest) => {
             const token = jwt.sign({email},process.env.JWT_SECRET as string,{expiresIn:"1d"});
             return NextResponse.json({message:"User already exists",success:true,token:token});
         }
-        const newUser = new TestUsers({
-            name,
-            email,
-            regno,
-            phone,
-            branch,
-            domain,
-            campus
-        });
+       const newUser = new TestUsers({
+    name,
+    email,
+    regno,
+    phone,
+    branch,
+    domain,
+    campus,
+    password: Math.random().toString(36).slice(-8)
+});
         await newUser.save();
         const token = jwt.sign({email},process.env.JWT_SECRET as string,{expiresIn:"1d"});
         return NextResponse.json({message:"User created successfully",success:true,token:token});
