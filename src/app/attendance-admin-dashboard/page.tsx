@@ -1326,30 +1326,34 @@ export default function AttendanceAdminDashboard() {
             <h1 className="text-3xl font-bold bg-gradient-to-b from-neutral-200 to-purple-500 bg-clip-text text-transparent mb-4 md:mb-0">
               Attendance Dashboard
             </h1>
-            <div className="flex space-x-2">
-              <Button
-                className="bg-purple-600 hover:bg-purple-700"
-                onClick={() => router.push("/attendance-admin")}
-              >
-                <QrCode className="h-4 w-4 mr-2" />
-                QR Generator
-              </Button>
-              <Button
-                className="bg-purple-600 hover:bg-purple-700"
-                onClick={() => router.push("/adminupdateattendancemanually")}
-              >
-                <Hand className="h-4 w-4 mr-2" />
-                Attendance Manual Update
-              </Button>
-              <Button
-                variant="outline"
-                className="border-gray-700 text-gray-400 hover:bg-gray-800"
-                onClick={fetchAttendanceData}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh Data
-              </Button>
-            </div>
+         <div className="w-full">
+  <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 mb-2 sm:mb-0">
+    <Button
+      className="bg-purple-600 hover:bg-purple-700 w-full sm:w-auto"
+      onClick={() => router.push("/attendance-admin")}
+    >
+      <QrCode className="h-4 w-4 mr-2" />
+      QR Generator
+    </Button>
+    <Button
+      className="bg-purple-600 hover:bg-purple-700 w-full sm:w-auto overflow-hidden"
+      onClick={() => router.push("/adminupdateattendancemanually")}
+    >
+      <Hand className="h-4 w-4 mr-2" />
+      Attendance Manual Update
+    </Button>
+  </div>
+  <div className="mt-2 sm:mt-5 sm:ml-auto sm:inline-block">
+    <Button
+      variant="outline"
+      className="border-gray-700 text-gray-400 hover:bg-gray-800 w-full sm:w-auto"
+      onClick={fetchAttendanceData}
+    >
+      <RefreshCw className="h-4 w-4 mr-2" />
+      Refresh Data
+    </Button>
+  </div>
+</div>
           </header>
 
           {/* Campus Filter */}
@@ -1672,7 +1676,7 @@ export default function AttendanceAdminDashboard() {
           </Card>
 
           {/* Attendance Data Tabs */}
-          <Tabs defaultValue="records" className="w-full">
+          <Tabs defaultValue="records" className="w-full overflow-hidden sm:text-[1px]">
             <TabsList className="grid grid-cols-4 mb-8">
               <TabsTrigger value="records">Attendance Records</TabsTrigger>
               <TabsTrigger value="absent">Absent Students</TabsTrigger>
