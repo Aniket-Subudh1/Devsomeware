@@ -6,7 +6,6 @@ export async function GET(req: NextRequest) {
   try {
     const adminPassword = req.nextUrl.searchParams.get('password');
     
-    // Verify admin credentials
     if (!adminPassword || adminPassword !== process.env.ADMIN_PASSWORD) {
       return NextResponse.json({
         success: false,
@@ -16,14 +15,13 @@ export async function GET(req: NextRequest) {
     
     await ConnectDb();
     
-    // Get the settings (creates default if none exist)
     let settings = await AttendanceSettings.findOne();
     
-    // Create default settings if none exist
     if (!settings) {
       settings = await AttendanceSettings.create({
         lastUpdated: new Date(),
-        updatedBy: "admin"
+        updatedBy: "admin",
+        maxQrValiditySeconds: 600 
       });
     }
     
@@ -64,9 +62,8 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
-    // Update settings
     const updatedSettings = await AttendanceSettings.findOneAndUpdate(
-      {}, // Empty filter to match the single document
+      {}, 
       {
         ...settings,
         lastUpdated: new Date(),
@@ -90,7 +87,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Handle OPTIONS requests for CORS support
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,

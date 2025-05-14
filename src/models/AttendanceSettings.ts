@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const AttendanceSettingsSchema = new mongoose.Schema({
     geoLocationEnabled: {
         type: Boolean,
-        default: true
+        default: false
     },
     defaultRadius: {
         type: Number,
@@ -19,7 +19,7 @@ const AttendanceSettingsSchema = new mongoose.Schema({
     },
     maxQrValiditySeconds: {
         type: Number,
-        default: 10
+        default: 1800  
     },
     multiDeviceLimit: {
         type: Boolean,
@@ -30,7 +30,6 @@ const AttendanceSettingsSchema = new mongoose.Schema({
         default: true
     }
 }, { timestamps: true });
-
 
 AttendanceSettingsSchema.statics.getSettings = async function() {
     const settings = await this.findOne({});

@@ -1,28 +1,5 @@
 import mongoose from "mongoose";
 
-const LocationSchema = new mongoose.Schema({
-    latitude: {
-        type: Number,
-        required: true
-    },
-    longitude: {
-        type: Number,
-        required: true
-    },
-    campus: {
-        type: String,
-        required: false
-    },
-    accuracy: {
-        type: Number,
-        required: false
-    },
-    timestamp: {
-        type: Date,
-        default: Date.now
-    }
-}, { _id: false });
-
 const AttendanceSchema = new mongoose.Schema({
     email: {
         type: String,
@@ -45,14 +22,6 @@ const AttendanceSchema = new mongoose.Schema({
         type: Date,
         required: false
     },
-    checkInLocation: {
-        type: LocationSchema,
-        required: false
-    },
-    checkOutLocation: {
-        type: LocationSchema,
-        required: false
-    },
     duration: {
         type: Number, 
         required: false
@@ -73,7 +42,7 @@ const AttendanceSchema = new mongoose.Schema({
     },
     verificationMethod: {
         type: String,
-        enum: ['geolocation', 'manual', 'auto'],
+        enum: ['manual', 'auto'],
         default: 'auto'
     },
     notes: {

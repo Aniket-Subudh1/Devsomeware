@@ -3,7 +3,6 @@ import ConnectDb from "@/middleware/connectDb";
 import Attendance from "@/models/Attendance";
 import TestUsers from "@/models/TestUsers";
 import StudentSession from "@/models/StudentSession";
-import AttendanceSettings from "@/models/AttendanceSettings";
 import jwt from "jsonwebtoken";
 
 interface DecodedToken {
@@ -11,10 +10,10 @@ interface DecodedToken {
   id: string;
 }
 
-interface Student {
+interface TestUserDocument {
   _id: string;
   email: string;
-  campus?: string;
+  name?: string;
   [key: string]: unknown;
 }
 
@@ -40,8 +39,9 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
-    const { token, qrData, email, deviceId, type, studentLocation } = data || {};
+    const { token, qrData, email, deviceId, type } = data || {};
     
+    // Validate all required fields before proceeding
     if (!token || !qrData || !email || !deviceId || !type) {
       return NextResponse.json({
         success: false,
@@ -49,10 +49,12 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
+    // Parse QR data
     let qrPayload;
     try {
       qrPayload = JSON.parse(qrData);
-    } catch  {
+    } catch (error) {
+      console.log(error);
       return NextResponse.json({
         success: false,
         message: "Invalid QR code format"
@@ -66,130 +68,112 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
+    // Current time check
     const currentTime = Math.floor(Date.now() / 1000);
     
-    // Get current attendance settings
-    const settingsData = await AttendanceSettings.findOne().sort({ createdAt: -1 }).lean() || {
-      maxQrValiditySeconds: 300,
-      geoLocationEnabled: false,
-      defaultRadius: 50
-    };
+    // Check QR code has a timestamp and verify expiration
+    const qrTimestamp = qrPayload.timestamp || 0;
+    const expiresAt = qrPayload.expiresAt || (qrTimestamp + 1800); // Default to 30 minutes if no expiresAt
     
-    // Ensure settings is an object, not an array
-    const settings = Array.isArray(settingsData) 
-      ? { maxQrValiditySeconds: 300, geoLocationEnabled: false, defaultRadius: 50 } 
-      : settingsData;
-    
-    // Check if QR code has expired
-    const maxValidity = settings.maxQrValiditySeconds || 300;
-    
-    const isExpired = qrPayload.expiresAt 
-      ? currentTime > qrPayload.expiresAt 
-      : currentTime - qrPayload.timestamp > maxValidity; 
-    
-    if (isExpired) {
+    // Ensure QR code is not expired
+    if (currentTime > expiresAt) {
       return NextResponse.json({
         success: false,
         message: "QR code has expired. Please scan a fresh code."
       }, { status: 400 });
     }
     
-    // Verify signature if needed
+    // Verify admin signature
     const adminSignature = process.env.NEXT_PUBLIC_ADMIN_SIGNATURE || 'default-signature';
     if (qrPayload.adminSignature !== adminSignature) {
+      // Log potential security breach
+      console.warn(`[SECURITY] Invalid QR signature attempt from ${email} with deviceId ${deviceId}`);
+      
       return NextResponse.json({
         success: false,
         message: "Invalid QR code signature"
       }, { status: 400 });
     }
     
-    // Verify geolocation if enabled
-    if (settings.geoLocationEnabled && qrPayload.geoRequired) {
-      // If geolocation is required but not provided by the student
-      if (!studentLocation || !studentLocation.latitude || !studentLocation.longitude) {
-        return NextResponse.json({
-          success: false,
-          message: "Location access is required for attendance. Please enable location and try again."
-        }, { status: 400 });
-      }
-      
-      // If QR has location data, verify student's location is within allowed radius
-      if (qrPayload.location) {
-        const distance = calculateDistance(
-          studentLocation.latitude,
-          studentLocation.longitude,
-          qrPayload.location.latitude,
-          qrPayload.location.longitude
-        );
-        
-        const allowedRadius = qrPayload.location.radius || settings.defaultRadius || 50;
-        
-        if (distance > allowedRadius) {
-          // Log the location mismatch
-          console.warn(`[LOCATION] Student ${email} attempted attendance from ${distance.toFixed(1)}m away, outside the ${allowedRadius}m radius`);
-          
-          return NextResponse.json({
-            success: false,
-            message: `You must be within ${allowedRadius} meters of the classroom to record attendance. You are approximately ${Math.round(distance)}m away.`
-          }, { status: 403 });
-        }
-        
-        // If campus is specified in QR, verify student belongs to that campus
-        if (qrPayload.location.campus) {
-          const student = await TestUsers.findOne({ email }).lean();
-          
-          if (student && 'campus' in student && student.campus && student.campus.toLowerCase() !== qrPayload.location.campus.toLowerCase()) {
-            console.warn(`[CAMPUS] Student ${email} from campus ${student.campus} attempted attendance for campus ${qrPayload.location.campus}`);
-            
-            return NextResponse.json({
-              success: false,
-              message: `This attendance QR is for ${qrPayload.location.campus.toUpperCase()} campus. You are registered for ${student.campus.toUpperCase()} campus.`
-            }, { status: 403 });
-          }
-        }
-      }
-    }
-    
-    // Verify token and get student info
+    // Verify token and student
     let decoded: DecodedToken;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET as string) as DecodedToken;
-    } catch  {
+    } catch (error) {
+      console.log(error)
       return NextResponse.json({
         success: false,
-        message: "Invalid or expired token"
+        message: "Your session has expired. Please log in again."
       }, { status: 401 });
     }
     
-    // Verify that the email matches the token
     if (decoded.email !== email) {
+      console.warn(`[SECURITY] Token email mismatch: token ${decoded.email} vs request ${email}`);
+      
       return NextResponse.json({
         success: false,
-        message: "Token email mismatch"
+        message: "Token email does not match request email"
       }, { status: 401 });
     }
     
-    // Check if student exists
-    const student = await TestUsers.findOne({ email }).lean() as Student | null;
+    // Run these checks in parallel for better performance
+    const [student, session, existingNonceRecord] = await Promise.all([
+      // Check if student exists
+      TestUsers.findOne({ email }).lean() as Promise<{ _id: string; [key: string]: any } | null>,
+      
+      // Verify session and device match
+      StudentSession.findOne({
+        email,
+        isActive: true,
+      }).lean(),
+      
+      // Check if this nonce has been used before (to prevent QR code reuse)
+      qrPayload.nonce ? 
+        StudentSession.findOne({
+          'scanHistory.nonce': qrPayload.nonce
+        }) : 
+        null
+    ]);
+    
+    // Validate student
     if (!student) {
       return NextResponse.json({
         success: false,
-        message: "Student not found"
+        message: "Student account not found"
       }, { status: 404 });
     }
     
-    // Verify session
-    const session = await StudentSession.findOne({
-      email,
-      isActive: true,
-      deviceId
-    }).lean();
-    
+    // Validate session
     if (!session) {
       return NextResponse.json({
         success: false,
-        message: "No active session found for this device"
+        message: "No active session found. Please log in again."
       }, { status: 401 });
+    }
+
+    if (Array.isArray(session) || !session.deviceId) {
+      return NextResponse.json({
+        success: false,
+        message: "Session data is invalid"
+      }, { status: 500 });
+    }
+    
+    // Check if device IDs match
+    if (session.deviceId !== deviceId) {
+      console.warn(`[SECURITY] Device mismatch for ${email}: session ${session.deviceId} vs request ${deviceId}`);
+      
+      return NextResponse.json({
+        success: false,
+        message: "This session is bound to a different device. Please use the original device."
+      }, { status: 403 });
+    }
+    
+    // Check for nonce reuse
+    if (existingNonceRecord) {
+      return NextResponse.json({
+        success: false,
+        message: "This QR code has already been used. Please scan a fresh code."
+      }, { status: 400 });
     }
     
     // Determine the current date (reset to start of day)
@@ -207,25 +191,34 @@ export async function POST(req: NextRequest) {
     
     const now = new Date();
     
+    if (attendanceRecord) {
+      const lastActionTime = attendanceRecord.lastAction === 'check-in' 
+        ? attendanceRecord.checkInTime 
+        : attendanceRecord.checkOutTime;
+        
+      if (lastActionTime) {
+        const timeSinceLastAction = now.getTime() - new Date(lastActionTime).getTime();
+     
+        if (timeSinceLastAction < 10000) {
+          return NextResponse.json({
+            success: false,
+            message: "Please wait before scanning again"
+          }, { status: 429 }); 
+        }
+      }
+    }
+    
     if (qrPayload.type === 'check-in') {
-      // Handle check-in
       if (!attendanceRecord) {
-        // Create new attendance record
         attendanceRecord = new Attendance({
           email,
           testUserId: student._id,
           date: today,
           checkInTime: now,
           status: 'present',
-          lastAction: 'check-in',
-          checkInLocation: studentLocation ? {
-            latitude: studentLocation.latitude,
-            longitude: studentLocation.longitude,
-            campus: qrPayload.location ? qrPayload.location.campus : student.campus
-          } : null
+          lastAction: 'check-in'
         });
       } else if (attendanceRecord.checkInTime && attendanceRecord.checkOutTime) {
-        // Student has already completed attendance cycle for today
         return NextResponse.json({
           success: true,
           message: "You have already completed your attendance for today",
@@ -234,7 +227,6 @@ export async function POST(req: NextRequest) {
           lastAction: 'complete'
         });
       } else if (attendanceRecord.lastAction === 'check-in') {
-        // Already checked in
         return NextResponse.json({
           success: true,
           message: "You are already checked in",
@@ -247,21 +239,11 @@ export async function POST(req: NextRequest) {
         attendanceRecord.checkInTime = now;
         attendanceRecord.lastAction = 'check-in';
         
-        // Update location if provided
-        if (studentLocation) {
-          attendanceRecord.checkInLocation = {
-            latitude: studentLocation.latitude,
-            longitude: studentLocation.longitude,
-            campus: qrPayload.location ? qrPayload.location.campus : student.campus
-          };
-        }
-        
         if (attendanceRecord.status === 'half-day') {
           attendanceRecord.status = 'present';
         }
       }
     } else if (qrPayload.type === 'check-out') {
-      // Handle check-out
       if (!attendanceRecord || !attendanceRecord.checkInTime) {
         return NextResponse.json({
           success: false,
@@ -269,8 +251,7 @@ export async function POST(req: NextRequest) {
         }, { status: 400 });
       }
       
-      if (attendanceRecord.checkInTime && attendanceRecord.checkOutTime) {
-        // Student has already completed attendance cycle for today
+      if (attendanceRecord.checkInTime && attendanceRecord.checkOutTime && attendanceRecord.lastAction === 'check-out') {
         return NextResponse.json({
           success: true,
           message: "You have already completed your attendance for today",
@@ -280,75 +261,61 @@ export async function POST(req: NextRequest) {
         });
       }
       
-      if (attendanceRecord.lastAction === 'check-out') {
-        return NextResponse.json({
-          success: true,
-          message: "You have already checked out",
-          lastCheckIn: attendanceRecord.checkInTime,
-          lastCheckOut: attendanceRecord.checkOutTime,
-          lastAction: attendanceRecord.lastAction
-        });
-      }
-      
-      // Update record with check-out info
       attendanceRecord.checkOutTime = now;
       attendanceRecord.lastAction = 'check-out';
       
-      // Update location if provided
-      if (studentLocation) {
-        attendanceRecord.checkOutLocation = {
-          latitude: studentLocation.latitude,
-          longitude: studentLocation.longitude,
-          campus: qrPayload.location ? qrPayload.location.campus : student.campus
-        };
-      }
-      
-      // Calculate duration in minutes
       const checkInTime = new Date(attendanceRecord.checkInTime).getTime();
       const checkOutTime = now.getTime();
       const durationMinutes = Math.round((checkOutTime - checkInTime) / 60000);
       attendanceRecord.duration = durationMinutes;
       
-      // Set status based on duration
-      if (durationMinutes < 240) { // Less than 4 hours
+      if (durationMinutes < 240) { 
         attendanceRecord.status = 'half-day';
       } else {
         attendanceRecord.status = 'present';
       }
     }
     
-    // Save attendance record
-    await attendanceRecord.save();
-    
-    // Update session
-    await StudentSession.findOneAndUpdate(
-      { email, isActive: true },
-      {
-        lastActive: now,
-        $push: {
-          scanHistory: qrPayload.nonce ? {
-            nonce: qrPayload.nonce,
-            timestamp: now,
-            action: qrPayload.type,
-            location: studentLocation || null
-          } : {
-            nonce: "legacy-" + Date.now(),
-            timestamp: now,
-            action: qrPayload.type,
-            location: studentLocation || null
-          },
-          attendanceHistory: {
-            date: today,
-            checkInTime: attendanceRecord.checkInTime,
-            checkOutTime: attendanceRecord.checkOutTime,
-            duration: attendanceRecord.duration,
-            status: attendanceRecord.status,
-            location: studentLocation || null
+    try {
+      // Save attendance record and update session in parallel
+      await Promise.all([
+        // Save attendance record
+        attendanceRecord.save(),
+        
+        // Update session with nonce to prevent reuse and add to attendance history
+        StudentSession.findOneAndUpdate(
+          { email, isActive: true },
+          {
+            lastActive: now,
+            $push: {
+              scanHistory: qrPayload.nonce ? {
+                nonce: qrPayload.nonce,
+                timestamp: now,
+                action: qrPayload.type
+              } : {
+                nonce: "legacy-" + Date.now(),
+                timestamp: now,
+                action: qrPayload.type
+              },
+              attendanceHistory: {
+                date: today,
+                checkInTime: attendanceRecord.checkInTime,
+                checkOutTime: attendanceRecord.checkOutTime,
+                duration: attendanceRecord.duration,
+                status: attendanceRecord.status
+              }
+            },
+            $inc: { totalAttendance: qrPayload.type === 'check-out' ? 1 : 0 }
           }
-        },
-        $inc: { totalAttendance: qrPayload.type === 'check-out' ? 1 : 0 }
-      }
-    );
+        )
+      ]);
+    } catch (error) {
+      console.error("Error saving attendance record:", error);
+      return NextResponse.json({
+        success: false,
+        message: "Failed to save attendance record"
+      }, { status: 500 });
+    }
     
     return NextResponse.json({
       success: true,
@@ -361,33 +328,9 @@ export async function POST(req: NextRequest) {
     console.error("Error recording attendance:", error);
     return NextResponse.json({
       success: false,
-      message: "Internal server error"
+      message: "Unable to process your attendance. Please try again."
     }, { status: 500 });
   }
-}
-
-// Helper function to calculate distance between two points using the Haversine formula
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371e3; // Earth radius in meters
-  const φ1 = lat1 * Math.PI / 180; // φ, λ in radians
-  const φ2 = lat2 * Math.PI / 180;
-  const Δφ = (lat2 - lat1) * Math.PI / 180;
-  const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c; 
-}
-
-
-export async function GET() {
-  // [existing implementation]
-  return NextResponse.json({
-    success: true
-  });
 }
 
 export async function OPTIONS() {

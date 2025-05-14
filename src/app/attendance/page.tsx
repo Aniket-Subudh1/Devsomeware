@@ -6,10 +6,7 @@ import { Toaster, toast } from "sonner";
 import {
   Loader2,
   AlertTriangle,
-  UserCheck,
-  UserX,
   RefreshCw,
-  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +21,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Switch } from "@/components/ui/switch";
 import { useRouter } from "next/navigation";
 interface StudentInfo {
   name?: string;
@@ -35,7 +31,16 @@ interface StudentInfo {
   regno?: string;
   [key: string]: string | number | boolean | undefined;
 }
+
+interface QrCodePayload {
+  timestamp: number;
+  expiresAt: number;
+  type: "check-in" | "check-out";
+  [key: string]: string | number | boolean | undefined;
+}
+
 import { TbLockPassword } from "react-icons/tb";
+
 export default function StudentScanner() {
   const [email, setEmail] = useState("");
   const router = useRouter();
@@ -59,17 +64,6 @@ export default function StudentScanner() {
   const [scanSuccessTime, setScanSuccessTime] = useState<number | null>(null);
   const [lastScannedQR, setLastScannedQR] = useState<string | null>(null);
   const [lastScanTime, setLastScanTime] = useState<number>(0);
-  
-  // Location state
-  const [locationEnabled, setLocationEnabled] = useState(true);
-  const [currentLocation, setCurrentLocation] = useState<{
-    latitude: number;
-    longitude: number;
-    accuracy?: number;
-  } | null>(null);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationRequired, setLocationRequired] = useState(false);
 
   const storeCredentials = (token: string, email: string, deviceId: string) => {
     document.cookie = `studentAttendanceToken=${token}; max-age=86400; path=/; samesite=strict`;
@@ -141,99 +135,6 @@ export default function StudentScanner() {
         lsDeviceId ||
         (backupValues ? backupValues.deviceId : null),
     };
-  };
-
-  const getLocation = () => {
-    setLocationLoading(true);
-    setLocationError(null);
-    
-    if (!navigator.geolocation) {
-      setLocationError("Geolocation is not supported by your browser");
-      setLocationLoading(false);
-      toast.error("Your browser doesn't support geolocation");
-      return;
-    }
-    
-    // Check if permission is already granted
-    if (navigator.permissions && navigator.permissions.query) {
-      navigator.permissions.query({ name: 'geolocation' })
-        .then(permissionStatus => {
-          console.log('Geolocation permission status:', permissionStatus.state);
-          
-          if (permissionStatus.state === 'denied') {
-            setLocationError("Location permission is denied. Please enable location in your browser settings.");
-            setLocationLoading(false);
-            toast.error("Location permission denied. Please enable in settings.");
-            return;
-          }
-          
-          // If permission is granted or prompt, request the location
-          requestLocation();
-        })
-        .catch(error => {
-          console.warn('Permission query error:', error);
-          // Fall back to directly requesting location
-          requestLocation();
-        });
-    } else {
-      // Just request location directly for browsers without Permissions API
-      requestLocation();
-    }
-    
-    function requestLocation() {
-      // Use high accuracy for better positioning indoors
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const newLocation = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-          };
-          
-          setCurrentLocation(newLocation);
-          setLocationLoading(false);
-          toast.success("Location updated successfully");
-          
-          // Store location in session to avoid frequent permission requests
-          try {
-            sessionStorage.setItem(
-              "studentLocation", 
-              JSON.stringify({
-                ...newLocation,
-                timestamp: Date.now()
-              })
-            );
-          } catch (e) {
-            console.warn("Error storing location:", e);
-          }
-        },
-        (error) => {
-          console.error("Error getting location:", error);
-          let errorMessage = "Failed to get location";
-          
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              errorMessage = "Location permission denied. Please enable location in your browser settings.";
-              break;
-            case error.POSITION_UNAVAILABLE:
-              errorMessage = "Location information unavailable. Check if you're indoors or have poor GPS signal.";
-              break;
-            case error.TIMEOUT:
-              errorMessage = "Location request timed out. Please try again.";
-              break;
-          }
-          
-          setLocationError(errorMessage);
-          setLocationLoading(false);
-          toast.error(errorMessage);
-        },
-        { 
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0 
-        }
-      );
-    }
   };
 
   const handleRefreshScanner = () => {
@@ -309,10 +210,6 @@ export default function StudentScanner() {
         });
 
         storeCredentials(data.token, email, deviceFingerprint);
-        
-        // Request location after successful login
-        getLocation();
-
         toast.success(data.message || "Login successful");
       } else {
         toast.error(data.message || "Login failed");
@@ -649,119 +546,13 @@ export default function StudentScanner() {
       try {
         qrPayload = JSON.parse(qrData);
 
-        // Check if geolocation is required from QR code
-        if (qrPayload.geoRequired) {
-          setLocationRequired(true);
-          
-          // If location is required but not enabled, enable it
-          if (!locationEnabled) {
-            setLocationEnabled(true);
-          }
-          
-          // If location is required but we don't have current location
-          if (!currentLocation) {
-            // First check if the browser supports geolocation
-            if (!navigator.geolocation) {
-              setScanError("Your browser doesn't support geolocation, which is required for attendance.");
-              toast.error("Browser doesn't support geolocation");
-              setScannerLoading(false);
-              setTimeout(() => setScannerActive(true), 1000);
-              return;
-            }
-            
-            // Explicitly request location permission rather than calling getLocation()
-            // This ensures the permission dialog appears immediately when scanning
-            setScanError("Requesting location access...");
-            
-            try {
-              // Use a promise to handle the geolocation request
-              const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-                navigator.geolocation.getCurrentPosition(resolve, reject, {
-                  enableHighAccuracy: true,
-                  timeout: 10000,
-                  maximumAge: 0
-                });
-              });
-              
-              // Update location state with the new position
-              const newLocation = {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy,
-              };
-              
-              setCurrentLocation(newLocation);
-              
-              // Store the location in session storage
-              try {
-                sessionStorage.setItem(
-                  "studentLocation", 
-                  JSON.stringify({
-                    ...newLocation,
-                    timestamp: Date.now()
-                  })
-                );
-              } catch (e) {
-                console.warn("Error storing location:", e);
-              }
-              
-              // Continue with QR processing now that we have location
-              await processQrWithLocation(qrPayload, qrData, newLocation);
-              return;
-              
-            } catch (geoError) {
-              console.error("Geolocation error:", geoError);
-              
-              // Handle specific geolocation errors
-              let errorMessage = "Failed to get location";
-              if (geoError instanceof GeolocationPositionError) {
-                switch (geoError.code) {
-                  case geoError.PERMISSION_DENIED:
-                    errorMessage = "Location permission denied. Please enable location in your browser settings and try again.";
-                    break;
-                  case geoError.POSITION_UNAVAILABLE:
-                    errorMessage = "Location information unavailable. Please try again.";
-                    break;
-                  case geoError.TIMEOUT:
-                    errorMessage = "Location request timed out. Please try again.";
-                    break;
-                }
-              }
-              
-              setLocationError(errorMessage);
-              setScanError(errorMessage);
-              toast.error(errorMessage);
-              setScannerLoading(false);
-              setTimeout(() => setScannerActive(true), 1000);
-              return;
-            }
-          }
-        } else {
-          setLocationRequired(false);
-        }
-
-        // Check if QR code has expired
-        const qrTimestamp = qrPayload.timestamp || 0;
-        const expiresAt = qrPayload.expiresAt || (qrTimestamp + 10);
-        if (currentTime / 1000 > expiresAt) {
-          setScanError("QR code has expired. Please scan a fresh code.");
-          toast.error("QR code has expired");
-          setScannerLoading(false);
-          setTimeout(() => setScannerActive(true), 1000);
-          return;
-        }
+        // Process QR code
+        await processQrCode(qrPayload, qrData);
         
-        // If we have location and it's required, or location is not required,
-        // process the QR code
-        await processQrWithLocation(
-          qrPayload, 
-          qrData, 
-          qrPayload.geoRequired ? currentLocation : null
-        );
-        
-      } catch  {
+      } catch (error) {
         setScanError("Invalid QR code format. Please try scanning again.");
         toast.error("Invalid QR code format");
+        console.error("QR code parsing error:", error);
         setScannerLoading(false);
         setTimeout(() => setScannerActive(true), 1000);
       }
@@ -771,35 +562,38 @@ export default function StudentScanner() {
         error instanceof Error
           ? error.message
           : "An error occurred. Please try again.";
-      toast.error(errorMessage);
       setScanError(errorMessage);
       setScannerLoading(false);
       setTimeout(() => setScannerActive(true), 1500);
     }
   };
 
-  // Extracted the QR processing logic to a separate function
-  const processQrWithLocation = async (
-    qrPayload: any, 
-    qrData: string, 
-    locationData: { latitude: number; longitude: number; accuracy?: number; } | null
-  ) => {
+  // Process QR code
+  const processQrCode = async (qrPayload: QrCodePayload, qrData: string) => {
     try {
+      // Check if QR code has expired
+      const currentTime = Date.now() / 1000;
+      const qrTimestamp = qrPayload.timestamp || 0;
+      const expiresAt = qrPayload.expiresAt || (qrTimestamp + 600);
+      
+      if (currentTime > expiresAt) {
+        setScanError("QR code has expired. Please scan a fresh code.");
+        toast.error("QR code has expired");
+        setScannerLoading(false);
+        setTimeout(() => setScannerActive(true), 1000);
+        return;
+      }
+      
       const timestamp = new Date().getTime();
 
       // Prepare the request payload
-      const payload: any = {
+      const payload = {
         token: sessionToken,
         qrData,
         email,
         deviceId,
         type: qrPayload.type
       };
-      
-      // Add location data if available
-      if (locationData) {
-        payload.studentLocation = locationData;
-      }
 
       const response = await fetch(
         `/api/attendance/student/record?_t=${timestamp}`,
@@ -917,7 +711,7 @@ export default function StudentScanner() {
             }
           );
 
-         if (!response.ok) {
+          if (!response.ok) {
             const errorText = await response.text();
             let errorMessage;
             try {
@@ -945,32 +739,6 @@ export default function StudentScanner() {
               lastCheckOut: data.lastCheckOut,
               lastAction: data.lastAction,
             });
-            
-            // Try to get stored location from session storage
-            try {
-              const storedLocation = sessionStorage.getItem("studentLocation");
-              if (storedLocation) {
-                const locationData = JSON.parse(storedLocation);
-                
-                // Check if location is recent (less than 5 minutes old)
-                if (Date.now() - locationData.timestamp < 5 * 60 * 1000) {
-                  setCurrentLocation({
-                    latitude: locationData.latitude,
-                    longitude: locationData.longitude,
-                    accuracy: locationData.accuracy
-                  });
-                } else {
-                  // Location is too old, get new location
-                  getLocation();
-                }
-              } else {
-                // No stored location, get new location
-                getLocation();
-              }
-            } catch (e) {
-              console.warn("Error retrieving stored location:", e);
-              getLocation();
-            }
           } else {
             localStorage.removeItem("studentAttendanceToken");
             localStorage.removeItem("studentAttendanceEmail");
@@ -1024,24 +792,6 @@ export default function StudentScanner() {
       return cleanupChecker;
     }
   }, []);
-
-  // Location update interval - refresh location every 2 minutes
-  useEffect(() => {
-    if (sessionToken) {
-      // Get initial location
-      if (!currentLocation) {
-        getLocation();
-      }
-      
-      const locationInterval = setInterval(() => {
-        if (locationEnabled) {
-          getLocation();
-        }
-      }, 2 * 60 * 1000); // Every 2 minutes
-      
-      return () => clearInterval(locationInterval);
-    }
-  }, [sessionToken, locationEnabled]);
 
   const formatAttendanceTime = (timestamp: string | null) => {
     if (!timestamp) return "Not recorded";
@@ -1166,80 +916,6 @@ export default function StudentScanner() {
               </div>
             </CardHeader>
             <CardContent className="flex flex-col items-center">
-              {/* Location Permission Request */}
-              {locationRequired && !currentLocation && (
-                <div className="w-full mb-4">
-                  <Alert className="bg-red-950/30 border-red-500/30">
-                    <AlertTriangle className="h-4 w-4 text-red-500" />
-                    <AlertTitle className="text-white">Location Permission Required</AlertTitle>
-                    <AlertDescription className="text-gray-300">
-                      <p className="mb-2">
-                        You must enable location services to mark attendance. The system requires verification that you are physically present in the classroom.
-                      </p>
-                      <Button 
-                        variant="default" 
-                        size="sm" 
-                        onClick={getLocation} 
-                        disabled={locationLoading}
-                        className="w-full bg-red-600 hover:bg-red-700 text-white"
-                      >
-                        {locationLoading ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            Requesting Location...
-                          </>
-                        ) : (
-                          <>
-                            <MapPin className="h-4 w-4 mr-2" />
-                            Grant Location Permission
-                          </>
-                        )}
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                </div>
-              )}
-
-              {/* Location Settings */}
-              <div className="w-full mb-4">
-                <div className="flex justify-between items-center mb-2">
-                  <div className="flex items-center space-x-2">
-                    <MapPin className={`h-4 w-4 ${locationEnabled ? 'text-green-500' : 'text-gray-500'}`} />
-                    <span className="text-sm text-gray-300">Location Services</span>
-                  </div>
-                  <Switch 
-                    checked={locationEnabled}
-                    onCheckedChange={(checked) => {
-                      setLocationEnabled(checked);
-                      if (checked && !currentLocation) {
-                        getLocation();
-                      }
-                    }}
-                    disabled={locationRequired} // Can't disable if location is required
-                  />
-                </div>
-                
-                {locationEnabled && (
-                  <div className="p-2 rounded-md bg-gray-900/50 text-xs">
-                    {currentLocation ? (
-                      <div className="text-gray-400">
-                        <span className="text-green-500">✓</span> Location available 
-                        {currentLocation.accuracy && ` (±${Math.round(currentLocation.accuracy)}m)`}
-                      </div>
-                    ) : locationLoading ? (
-                      <div className="flex items-center text-gray-400">
-                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                        Getting location...
-                      </div>
-                    ) : locationError ? (
-                      <div className="text-red-400">{locationError}</div>
-                    ) : (
-                      <div className="text-yellow-400">Location not available</div>
-                    )}
-                  </div>
-                )}
-              </div>
-
               {/* Attendance Status */}
               <div className="w-full mb-4 p-3 rounded-lg bg-gray-900/50 border border-gray-800">
                 <h3 className="text-sm font-medium text-white mb-2">
@@ -1367,7 +1043,7 @@ export default function StudentScanner() {
                 <AlertDescription className="text-gray-400">
                   Scan the QR code displayed by your instructor. Make sure to
                   scan both check-in and check-out codes to record full
-                  attendance. {locationRequired && "You must be physically present in the classroom."}
+                  attendance. QR codes are valid for 10 minutes after generation.
                 </AlertDescription>
               </Alert>
 
@@ -1377,12 +1053,11 @@ export default function StudentScanner() {
                   onClick={() => {
                     router.push("/training/reset");
                   }}
-                  disabled={scannerActive || scannerLoading || (locationRequired && !currentLocation)}
+                  disabled={scannerActive || scannerLoading}
                 >
                   <TbLockPassword className="h-4 w-4 mr-2" />
                   Reset Your Password
                 </Button>
-                
               </div>
             </CardContent>
             <CardFooter className="text-center text-xs text-gray-500">

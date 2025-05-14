@@ -7,7 +7,6 @@ export function middleware(request: NextRequest) {
   if (path.startsWith('/attendance-admin') || path.startsWith('/attendance-admin-dashboard')) {
     const adminAuthenticated = request.cookies.get('adminAuthenticated')?.value === 'true';
     
-
     if (!adminAuthenticated && path === '/attendance-admin-dashboard') {
       return NextResponse.redirect(new URL('/attendance-admin', request.url));
     }
@@ -28,10 +27,8 @@ export function middleware(request: NextRequest) {
     return response;
   }
   
-  
   return NextResponse.next();
 }
-
 
 export const config = {
   matcher: ['/attendance-admin/:path*', '/attendance-admin-dashboard/:path*', '/attendance', '/attendance/:path*'],

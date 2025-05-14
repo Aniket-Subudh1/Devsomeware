@@ -18,13 +18,6 @@ export async function GET(req: NextRequest) {
     
     await ConnectDb();
     
-    // Get all students
-    const students = await TestUsers.find({}).lean();
-    const totalStudents = students.length;
-    
-    // Get active sessions
-    const activeSessions = await StudentSession.find({ isActive: true }).lean();
-    
     // Get today's date (start and end)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -32,13 +25,30 @@ export async function GET(req: NextRequest) {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    // Get today's check-ins and check-outs
-    const todayAttendance = await Attendance.find({
-      date: {
-        $gte: today,
-        $lt: tomorrow
-      }
-    }).lean();
+    // Run queries in parallel for better performance
+    const [
+      students,
+      activeSessions,
+      todayAttendance
+    ] = await Promise.all([
+      // Only fetch needed fields from students
+      TestUsers.find({}).select('_id email name').lean(),
+      
+      // Use countDocuments instead of find().lean() for active sessions
+      StudentSession.countDocuments({ isActive: true }),
+      
+      // Only fetch needed fields from attendance
+      Attendance.find({
+        date: {
+          $gte: today,
+          $lt: tomorrow
+        }
+      })
+      .select('email testUserId checkInTime checkOutTime status duration')
+      .lean()
+    ]);
+    
+    const totalStudents = students.length;
     
     // Count check-ins and check-outs - fixed to properly count
     const todayCheckins = todayAttendance.filter(record => record.checkInTime).length;
@@ -58,81 +68,133 @@ export async function GET(req: NextRequest) {
       ? Math.round((uniqueAttendeesToday / totalStudents) * 100) 
       : 0;
     
-    // Calculate stats for this week
+    // Calculate weekly stats more efficiently
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
     
-    const weeklyAttendance = await Attendance.find({
-      date: {
-        $gte: weekStart,
-        $lt: tomorrow
+    // Use a more efficient aggregation for weekly stats
+    const weeklyStatsAggregation = await Attendance.aggregate([
+      {
+        $match: {
+          date: {
+            $gte: weekStart,
+            $lt: tomorrow
+          }
+        }
+      },
+      {
+        $group: {
+          _id: { 
+            $dayOfWeek: "$date" // 1 for Sunday, 2 for Monday, etc.
+          },
+          uniqueAttendees: { 
+            $addToSet: "$email" 
+          }
+        }
+      },
+      {
+        $project: {
+          day: "$_id",
+          attendance: { $size: "$uniqueAttendees" }
+        }
+      },
+      {
+        $sort: { day: 1 }
       }
-    }).lean();
+    ]);
     
-    // Get unique attendees per day this week
-    const weeklyStats = [];
+    // Format the weekly stats
+    const weeklyStats = Array.from({ length: 7 }, (_, i) => ({
+      day: new Date(weekStart.getTime() + i * 86400000).toLocaleDateString('en-US', { weekday: 'short' }),
+      attendance: 0,
+      rate: 0
+    }));
     
-    for (let i = 0; i < 7; i++) {
-      const day = new Date(weekStart);
-      day.setDate(weekStart.getDate() + i);
-      
-      const nextDay = new Date(day);
-      nextDay.setDate(day.getDate() + 1);
-      
-      const dayAttendance = weeklyAttendance.filter(record => {
-        const recordDate = new Date(record.date);
-        return recordDate >= day && recordDate < nextDay;
-      });
-      
-      // Count unique students who at least checked in
-      const uniqueAttendees = new Set(dayAttendance.map(record => record.email)).size;
-      
-      weeklyStats.push({
-        day: day.toLocaleDateString('en-US', { weekday: 'short' }),
-        attendance: uniqueAttendees,
-        rate: totalStudents > 0 ? Math.round((uniqueAttendees / totalStudents) * 100) : 0
-      });
-    }
+  
+    weeklyStatsAggregation.forEach(stat => {
+      const index = stat.day - 1;
+      if (index >= 0 && index < 7) {
+        weeklyStats[index].attendance = stat.attendance;
+        weeklyStats[index].rate = totalStudents > 0 
+          ? Math.round((stat.attendance / totalStudents) * 100) 
+          : 0;
+      }
+    });
     
-    // Get latest check-ins
-    const latestCheckIns = await Attendance.find({
-      checkInTime: { $exists: true, $ne: null }
-    })
-    .sort({ checkInTime: -1 })
-    .limit(5)
-    .lean();
+    const latestCheckInsWithStudents = await Attendance.aggregate([
+      {
+        $match: {
+          checkInTime: { $exists: true, $ne: null }
+        }
+      },
+      {
+        $sort: { checkInTime: -1 }
+      },
+      {
+        $limit: 5
+      },
+      {
+        $lookup: {
+          from: 'testusers',
+          localField: 'testUserId',
+          foreignField: '_id',
+          as: 'student'
+        }
+      },
+      {
+        $unwind: {
+          path: '$student',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          email: 1,
+          checkInTime: 1,
+          'student.name': 1,
+          'student.regno': 1
+        }
+      }
+    ]);
     
-    // Join with student data
-    const latestCheckInsWithStudents = await Promise.all(
-      latestCheckIns.map(async (record) => {
-        const student = await TestUsers.findById(record.testUserId).lean();
-        return {
-          ...record,
-          student: student || { name: 'Unknown Student' }
-        };
-      })
-    );
+    // Calculate average duration efficiently
+    const avgDurationResult = await Attendance.aggregate([
+      {
+        $match: {
+          date: {
+            $gte: today,
+            $lt: tomorrow
+          },
+          checkInTime: { $exists: true, $ne: null },
+          checkOutTime: { $exists: true, $ne: null },
+          duration: { $exists: true, $ne: null }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          avgDuration: { $avg: "$duration" }
+        }
+      }
+    ]);
     
-    // Calculate average duration of attendance (only for records with both check-in and check-out)
-    const recordsWithDuration = todayAttendance.filter(record => 
-      record.checkInTime && record.checkOutTime && record.duration
-    );
-    const avgDuration = recordsWithDuration.length > 0
-      ? Math.round(recordsWithDuration.reduce((sum, record) => sum + (record.duration || 0), 0) / recordsWithDuration.length)
+    const avgDuration = avgDurationResult.length > 0 
+      ? Math.round(avgDurationResult[0].avgDuration) 
       : 0;
     
-    // In your API route
+    // Prepare stats object with all calculated data
     const stats = {
-      todayCheckins: todayCheckins,
-      todayCheckouts: todayCheckouts,
-      activeSessions: activeSessions.length || 0,
-      totalStudents: students.length || 0,
-      uniqueAttendees: uniqueAttendeesToday || 0,
-      attendanceRate: attendanceRate,
-      weeklyStats: weeklyStats || [],
-      latestCheckIns: latestCheckInsWithStudents || [],
-      avgDuration: avgDuration || 0,
-      completeAttendance: completeAttendance || 0
+      todayCheckins,
+      todayCheckouts,
+      activeSessions,
+      totalStudents,
+      uniqueAttendees: uniqueAttendeesToday,
+      attendanceRate,
+      avgDuration,
+      weeklyStats,
+      completeAttendance,
+      latestCheckIns: latestCheckInsWithStudents
     };
     
     return NextResponse.json({
