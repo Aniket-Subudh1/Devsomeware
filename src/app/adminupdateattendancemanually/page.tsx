@@ -213,11 +213,11 @@ export default function AdminManualAttendance() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(
-        (student) =>
-          student.name.toLowerCase().includes(term) ||
-          student.email.toLowerCase().includes(term) ||
-          (student.regno && student.regno.toLowerCase().includes(term))
-      );
+  (student) =>
+    student.name.toLowerCase().includes(term) ||
+    student.email.toLowerCase().includes(term) ||
+    (student.regno && typeof student.regno === 'string' && student.regno.toLowerCase().includes(term))
+);
     }
 
     if (campusFilter !== "all") {

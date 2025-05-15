@@ -663,14 +663,16 @@ export default function AttendanceAdminDashboard() {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter((record) => {
         const studentName = record.student?.name?.toLowerCase() || "";
-        const studentEmail = record.email.toLowerCase();
-        const studentRegNo = record.student?.regno?.toLowerCase() || "";
+const studentEmail = record.email.toLowerCase();
+const studentRegNo = record.student?.regno && typeof record.student.regno === 'string' 
+  ? record.student.regno.toLowerCase() 
+  : "";
 
-        return (
-          studentName.includes(term) ||
-          studentEmail.includes(term) ||
-          studentRegNo.includes(term)
-        );
+return (
+  studentName.includes(term) ||
+  studentEmail.includes(term) ||
+  studentRegNo.includes(term)
+);
       });
     }
 
