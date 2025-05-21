@@ -1344,6 +1344,13 @@ return (
       <Hand className="h-4 w-4 mr-2" />
       Attendance Manual Update
     </Button>
+     <Button
+      className="bg-purple-600 hover:bg-purple-700 w-full sm:w-auto overflow-hidden"
+      onClick={() => router.push("/attendance-analytics")}
+    >
+      <Hand className="h-4 w-4 mr-2" />
+      Analytics
+    </Button>
   </div>
   <div className="mt-2 sm:mt-5 sm:ml-auto sm:inline-block">
     <Button
