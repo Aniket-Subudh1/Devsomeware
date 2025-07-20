@@ -171,20 +171,7 @@ export default function TeamPage() {
               github="https://github.com/"
               linkedin="https://in.linkedin.com/in/smrutirupa-parida-594758294"
             />
-            <MemberCard
-              name="Phani Bhusan Mohanty"
-              role="Core Community Member"
-              image={Phani}
-              github="https://github.com/Phani2425"
-              linkedin="https://www.linkedin.com/in/phani-bhusan-mohanty-370b93237"
-            />
-            <MemberCard
-              name="Disha Mishra"
-              role="Core Community Member"
-              image={Disha}
-              github="https://github.com/dishaamishraa"
-              linkedin="https://www.linkedin.com/in/disha-mishra-699245279/"
-            />
+           
             <MemberCard
               name="Aryan Ashima Swain"
               role="Core Community Member"
